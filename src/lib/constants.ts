@@ -1,8 +1,7 @@
 import type {
   UserRole,
-  IndustryType,
+  JobDomain,
   EmploymentType,
-  JobStatus,
   ApplicationStatus,
   MessageType,
   TrialStatus,
@@ -35,7 +34,7 @@ export const USER_ROLE_LABELS: Record<UserRole, string> = {
   vendor: "供应商",
 };
 
-export const INDUSTRY_TYPE_LABELS: Record<IndustryType, string> = {
+export const DOMAIN_LABELS: Record<JobDomain, string> = {
   supermarket: "超市",
   warehouse: "仓储",
   sales: "销售",
@@ -47,12 +46,6 @@ export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
   hourly: "小时工",
   daily: "日结",
   outsource: "外包",
-};
-
-export const JOB_STATUS_LABELS: Record<JobStatus, string> = {
-  active: "招聘中",
-  paused: "已暂停",
-  closed: "已关闭",
 };
 
 export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
@@ -90,11 +83,17 @@ export const REFERRAL_STATUS_LABELS: Record<ReferralStatus, string> = {
   rejected: "已拒绝",
 };
 
+export const JOB_STATUS_LABELS: Record<string, string> = {
+  active: "招聘中",
+  paused: "暂停招聘",
+  closed: "已关闭",
+};
+
 /* ============================================================
  * 状态颜色映射（Tailwind 类名）
  * ============================================================ */
 
-export const JOB_STATUS_COLORS: Record<JobStatus, string> = {
+export const JOB_STATUS_COLORS: Record<string, string> = {
   active: "bg-brand-green/10 text-brand-green",
   paused: "bg-yellow-100 text-yellow-700",
   closed: "bg-gray-100 text-gray-500",

@@ -10,8 +10,10 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   // 公开页面：不需要登录即可访问
-  const publicPaths = ["/login"];
-  const isPublicPath = publicPaths.includes(pathname);
+  const isPublicPath =
+    pathname === "/" ||
+    pathname === "/login" ||
+    pathname.startsWith("/jobs");
 
   // 静态资源和 API 回调不拦截
   if (
@@ -52,7 +54,7 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getSession();
 
   // 已登录访问 /login → 重定向到 /home
-  if (session && isPublicPath) {
+  if (session && pathname === "/login") {
     return NextResponse.redirect(new URL("/home", request.url));
   }
 

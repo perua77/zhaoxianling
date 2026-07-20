@@ -22,7 +22,13 @@ interface AuthState {
   reset: () => void;
 }
 
-const supabase = createClient();
+let _supabase: ReturnType<typeof createClient> | null = null;
+function getSupabase() {
+  if (!_supabase) {
+    _supabase = createClient();
+  }
+  return _supabase;
+}
 
 export const useAuth = create<AuthState>((set, get) => ({
   user: null,
@@ -32,8 +38,9 @@ export const useAuth = create<AuthState>((set, get) => ({
   error: null,
 
   init: () => {
+    const client = getSupabase();
     // 订阅认证状态变化
-    const { data: authListener } = supabase.auth.onAuthStateChange(
+    const { data: authListener } = client.auth.onAuthStateChange(
       async (event, session) => {
         const currentUser = session?.user ?? null;
 
@@ -57,22 +64,27 @@ export const useAuth = create<AuthState>((set, get) => ({
     try {
       set({ loading: true, error: null });
 
-      const { data, error } = await supabase
+      const client = getSupabase();
+      const { data, error } = await client
         .from("profiles")
         .select("*")
         .eq("id", userId)
         .single();
 
       if (error) {
-        throw error;
+        console.warn("Profile fetch error:", error.message);
+        set({ profile: null, role: "candidate" as UserRole });
+        return;
       }
 
-      set({ profile: data as Profile, role: (data as Profile).role });
+      const profileData = data as Profile;
+      const primaryRole = profileData.roles?.[0] || "candidate";
+      set({ profile: profileData, role: primaryRole as UserRole });
     } catch (err) {
+      console.warn("Profile fetch exception:", err);
       set({
-        error: err instanceof Error ? err.message : "获取用户资料失败",
         profile: null,
-        role: null,
+        role: "candidate" as UserRole,
       });
     } finally {
       set({ loading: false });
@@ -81,7 +93,8 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     try {
-      await supabase.auth.signOut();
+      const client = getSupabase();
+      await client.auth.signOut();
       set({ user: null, profile: null, role: null, error: null });
     } catch (err) {
       set({
