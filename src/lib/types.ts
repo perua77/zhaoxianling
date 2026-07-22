@@ -25,10 +25,15 @@ export type JobStatus = "active" | "paused" | "closed";
 
 // 申请状态
 export type ApplicationStatus =
-  | "pending" // 待处理
-  | "reviewing" // 审核中
+  | "pending" // 待认领
+  | "reviewing" // 待审核
+  | "interview-scheduled" // 待面试（已安排面试时间）
   | "interviewing" // 面试中
-  | "offered" // 已录用
+  | "interview-passed" // 面试通过
+  | "interview-failed" // 面试未通过
+  | "offering" // 发放offer
+  | "hired" // 已录用
+  | "accepted" // 已录用（兼容旧数据）
   | "rejected"; // 已拒绝
 
 // 消息类型
@@ -112,6 +117,8 @@ export interface Interview {
   interviewer_id: string;
   scheduled_at: string;
   location: string;
+  contact_person?: string;
+  contact_phone?: string;
   status: string;
   evaluation?: string;
   checked_in_at?: string;
@@ -139,7 +146,7 @@ export interface Trial {
 // 消息通知
 export interface Message {
   id: string;
-  type: string;
+  type: MessageType;
   recipient_id: string;
   application_id?: string;
   title: string;

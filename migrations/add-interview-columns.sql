@@ -1,0 +1,11 @@
+ALTER TABLE interviews 
+ADD COLUMN IF NOT EXISTS contact_person TEXT;
+
+ALTER TABLE interviews 
+ADD COLUMN IF NOT EXISTS contact_phone TEXT;
+
+ALTER TABLE interviews 
+ADD COLUMN IF NOT EXISTS result TEXT;
+
+ALTER TABLE interviews 
+ADD COLUMN IF NOT EXISTS evaluation TEXT;

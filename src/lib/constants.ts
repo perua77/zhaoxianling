@@ -16,9 +16,7 @@ import {
   PlusCircle,
   ClipboardList,
   LayoutDashboard,
-  CalendarClock,
-  Share2,
-  Building2,
+  Calendar,
   type LucideIcon,
 } from "lucide-react";
 
@@ -49,10 +47,15 @@ export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
 };
 
 export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
-  pending: "待处理",
-  reviewing: "审核中",
+  pending: "待认领",
+  reviewing: "待审核",
+  "interview-scheduled": "待面试",
   interviewing: "面试中",
-  offered: "已录用",
+  "interview-passed": "面试通过",
+  "interview-failed": "面试未通过",
+  offering: "Offering",
+  hired: "已录用",
+  accepted: "已录用",
   rejected: "已拒绝",
 };
 
@@ -102,8 +105,13 @@ export const JOB_STATUS_COLORS: Record<string, string> = {
 export const APPLICATION_STATUS_COLORS: Record<ApplicationStatus, string> = {
   pending: "bg-gray-100 text-gray-600",
   reviewing: "bg-blue-100 text-blue-700",
+  "interview-scheduled": "bg-purple-100 text-purple-700",
   interviewing: "bg-brand-orange/10 text-brand-orange",
-  offered: "bg-brand-green/10 text-brand-green",
+  "interview-passed": "bg-green-100 text-green-700",
+  "interview-failed": "bg-red-100 text-red-700",
+  offering: "bg-yellow-100 text-yellow-700",
+  hired: "bg-brand-green/10 text-brand-green",
+  accepted: "bg-brand-green/10 text-brand-green",
   rejected: "bg-red-100 text-red-700",
 };
 
@@ -139,20 +147,22 @@ export const BOTTOM_NAV: Record<UserRole, NavTab[]> = {
   candidate: [
     { label: "首页", href: "/home", icon: Home },
     { label: "岗位", href: "/jobs", icon: Briefcase },
+    { label: "面试", href: "/interviews", icon: Calendar },
     { label: "消息", href: "/messages", icon: MessageSquare },
     { label: "我的", href: "/profile", icon: User },
   ],
   recruiter: [
     { label: "首页", href: "/home", icon: Home },
-    { label: "发布", href: "/jobs/new", icon: PlusCircle },
-    { label: "管理", href: "/jobs/manage", icon: ClipboardList },
-    { label: "看板", href: "/dashboard", icon: LayoutDashboard },
+    { label: "发布", href: "/recruiter/jobs/new", icon: PlusCircle },
+    { label: "管理", href: "/recruiter/jobs", icon: ClipboardList },
+    { label: "看板", href: "/recruiter/dashboard", icon: LayoutDashboard },
     { label: "消息", href: "/messages", icon: MessageSquare },
     { label: "我的", href: "/profile", icon: User },
   ],
   interviewer: [
     { label: "首页", href: "/home", icon: Home },
     { label: "岗位", href: "/jobs", icon: Briefcase },
+    { label: "面试安排", href: "/recruiter/interviews", icon: Calendar },
     { label: "消息", href: "/messages", icon: MessageSquare },
     { label: "我的", href: "/profile", icon: User },
   ],

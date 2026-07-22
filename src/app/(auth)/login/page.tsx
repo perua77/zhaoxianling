@@ -98,7 +98,15 @@ export default function LoginPage() {
           password,
         });
         if (loginError) throw loginError;
-        router.push("/home");
+
+        const { data: profile } = await supabase.from("profiles").select("roles").limit(1).single();
+        const roles = profile?.roles || [];
+        
+        if (roles.includes("recruiter") || roles.includes("interviewer") || roles.includes("vendor")) {
+          router.push("/recruiter/dashboard");
+        } else {
+          router.push("/home");
+        }
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "操作失败，请重试";

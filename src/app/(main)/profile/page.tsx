@@ -150,18 +150,6 @@ export default function ProfilePage() {
                 >
                   女
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, gender: "" })}
-                  disabled={!isEditing}
-                  className={`flex-1 rounded-md border py-2.5 text-sm font-medium transition-colors ${
-                    formData.gender === "" && isEditing
-                      ? "border-brand-green bg-brand-green/10 text-brand-green"
-                      : "border-border text-muted-foreground hover:border-brand-green/30"
-                  } ${!isEditing ? "cursor-not-allowed opacity-50" : ""}`}
-                >
-                  保密
-                </button>
               </div>
             </div>
 

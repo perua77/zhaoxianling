@@ -53,9 +53,16 @@ export async function middleware(request: NextRequest) {
     data: { session },
   } = await supabase.auth.getSession();
 
-  // 已登录访问 /login → 重定向到 /home
+  // 已登录访问 /login → 根据角色重定向
   if (session && pathname === "/login") {
-    return NextResponse.redirect(new URL("/home", request.url));
+    const { data: profile } = await supabase.from("profiles").select("roles").eq("id", session.user.id).single();
+    const roles = profile?.roles || [];
+    
+    if (roles.includes("recruiter") || roles.includes("interviewer") || roles.includes("vendor")) {
+      return NextResponse.redirect(new URL("/recruiter/dashboard", request.url));
+    } else {
+      return NextResponse.redirect(new URL("/home", request.url));
+    }
   }
 
   // 未登录访问受保护页面 → 重定向到 /login

@@ -90,6 +90,29 @@ export default function ApplyPage() {
     if (error) {
       setMessage({ type: "error", text: "投递失败：" + error.message });
     } else {
+      try {
+        const { data: jobData } = await supabase
+          .from("jobs")
+          .select("title")
+          .eq("id", jobId)
+          .single();
+        
+        if (jobData) {
+          await fetch("/api/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              recipient_id: user.id,
+              type: "apply",
+              title: "投递成功通知",
+              content: `你已成功投递「${jobData.title}」岗位，我们会尽快处理你的申请。`,
+            }),
+          });
+        }
+      } catch (msgError) {
+        console.error("Failed to send message:", msgError);
+      }
+      
       setMessage({ type: "success", text: "投递成功！我们会尽快处理你的投递" });
       setTimeout(() => {
         router.push("/my-applications");
@@ -156,17 +179,6 @@ export default function ApplyPage() {
                   }`}
                 >
                   女
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, gender: "" })}
-                  className={`flex-1 rounded-md border py-2.5 text-sm font-medium transition-colors ${
-                    formData.gender === ""
-                      ? "border-brand-green bg-brand-green/10 text-brand-green"
-                      : "border-border text-muted-foreground hover:border-brand-green/30"
-                  }`}
-                >
-                  保密
                 </button>
               </div>
             </div>

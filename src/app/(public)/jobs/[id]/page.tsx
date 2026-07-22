@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+
 import type { Job } from "@/lib/types";
 import {
   DOMAIN_LABELS,

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+
 import type { Job } from "@/lib/types";
 import {
   DOMAIN_LABELS,

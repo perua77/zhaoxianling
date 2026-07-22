@@ -9,7 +9,7 @@ export async function PUT(request: Request) {
 
   try {
     const body = await request.json();
-    const { id, full_name, phone, company, bio } = body;
+    const { id, full_name, gender, age, phone, company, bio } = body;
 
     if (!id) {
       return NextResponse.json({
@@ -23,6 +23,8 @@ export async function PUT(request: Request) {
       .upsert({
         id,
         full_name,
+        gender,
+        age: age || null,
         phone,
         company,
         bio,
