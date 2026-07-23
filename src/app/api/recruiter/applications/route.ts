@@ -65,7 +65,7 @@ export async function GET(request: Request) {
       (jobsData as JobData[] || []).map((j) => [j.id, j.title])
     );
 
-    interface ApplicationData { job_id: string; candidate_id: string; }
+    interface ApplicationData { id: string; job_id: string; candidate_id: string; }
     const { data: apps } = await supabase
       .from("applications")
       .select("*")

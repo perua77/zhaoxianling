@@ -107,7 +107,7 @@ export const useAuth = create<AuthState>((set, get) => ({
         token_type: "bearer",
         expires_in: session.expires_in,
         expires_at: Math.floor(Date.now() / 1000) + session.expires_in,
-      }).catch((err) => {
+      }).catch((err: unknown) => {
         console.warn("Failed to restore Supabase session:", err);
       });
     }
@@ -151,7 +151,7 @@ export const useAuth = create<AuthState>((set, get) => ({
         token_type: "bearer",
         expires_in: session.expires_in,
         expires_at: Math.floor(Date.now() / 1000) + session.expires_in,
-      }).catch((err) => {
+      }).catch((err: unknown) => {
         console.warn("Failed to sync Supabase session:", err);
       });
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 
@@ -145,6 +145,14 @@ function getSalaryUnit(employmentType: Job["employment_type"]): string {
 }
 
 export default function JobsPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center py-20">加载中...</div>}>
+      <JobsPageContent />
+    </Suspense>
+  );
+}
+
+function JobsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [jobs, setJobs] = useState<Job[]>([]);

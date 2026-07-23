@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
+
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
@@ -13,6 +14,14 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 
 export default function ApplyPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center py-20">加载中...</div>}>
+      <ApplyPageContent />
+    </Suspense>
+  );
+}
+
+function ApplyPageContent() {
   const { id: jobId } = useParams<{ id: string }>();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -41,7 +50,7 @@ export default function ApplyPage() {
 
   useEffect(() => {
     if (mode === "apply") {
-      async function fetchUserProfile() {
+      const fetchUserProfile = async () => {
         const supabase = createClient();
         let { data: { user } } = await supabase.auth.getUser();
 

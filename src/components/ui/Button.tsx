@@ -1,7 +1,7 @@
 import { forwardRef, type ButtonHTMLAttributes } from "react";
 import { cn } from "@/lib/utils";
 
-type Variant = "primary" | "secondary" | "ghost" | "outline";
+type Variant = "default" | "primary" | "secondary" | "ghost" | "outline";
 type Size = "sm" | "md" | "lg";
 
 export interface ButtonProps
@@ -13,6 +13,8 @@ export interface ButtonProps
 }
 
 const variantClasses: Record<Variant, string> = {
+  default:
+    "bg-brand-green text-white hover:bg-brand-green-dark active:bg-brand-green-dark",
   primary:
     "bg-brand-green text-white hover:bg-brand-green-dark active:bg-brand-green-dark",
   secondary:

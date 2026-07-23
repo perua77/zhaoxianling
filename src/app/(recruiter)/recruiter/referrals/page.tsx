@@ -150,9 +150,8 @@ export default function ReferralsPage() {
           icon={UserPlus}
           title="还没有推荐记录"
           description="去看看岗位，推荐合适的候选人吧"
-        >
-          <Button onClick={() => window.location.href = "/jobs"}>去看看岗位</Button>
-        </EmptyState>
+          action={<Button onClick={() => window.location.href = "/jobs"}>去看看岗位</Button>}
+        />
       ) : (
         <div className="space-y-4">
           {referrals.map((referral) => (

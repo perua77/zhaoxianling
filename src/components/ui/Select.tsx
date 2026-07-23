@@ -10,6 +10,7 @@ interface SelectContextValue {
   open: boolean;
   setOpen: React.Dispatch<React.SetStateAction<boolean>>;
   selectedLabel: ReactNode | null;
+  disabled: boolean;
 }
 
 const SelectContext = createContext<SelectContextValue | null>(null);
@@ -18,6 +19,7 @@ interface SelectProps {
   value: string | undefined;
   onValueChange: (value: string) => void;
   className?: string;
+  disabled?: boolean;
   children: ReactNode;
 }
 
@@ -44,6 +46,7 @@ export function Select({
   value,
   onValueChange,
   className,
+  disabled = false,
   children,
 }: SelectProps) {
   const [open, setOpen] = useState(false);
@@ -106,9 +109,9 @@ export function Select({
 
   return (
     <div className={cn("relative", className)}>
-      <SelectContext.Provider value={{ value, onValueChange, open, setOpen, selectedLabel }}>
+      <SelectContext.Provider value={{ value, onValueChange, open, setOpen, selectedLabel, disabled }}>
         {triggerChild}
-        {open && (
+        {open && !disabled && (
           <div
             ref={contentRef}
             className={cn(
@@ -132,7 +135,7 @@ export function SelectTrigger({ className, id, children }: SelectTriggerProps) {
   const context = useContext(SelectContext);
   if (!context) return null;
 
-  const { open, setOpen, selectedLabel } = context;
+  const { open, setOpen, selectedLabel, disabled } = context;
 
   const renderChildren = () => {
     return React.Children.map(children, (child) => {
@@ -151,11 +154,14 @@ export function SelectTrigger({ className, id, children }: SelectTriggerProps) {
   return (
     <button
       id={id}
-      onClick={() => setOpen(!open)}
+      type="button"
+      disabled={disabled}
+      onClick={() => !disabled && setOpen(!open)}
       className={cn(
         "flex h-11 w-full items-center justify-between rounded-lg border border-border bg-background px-3 text-sm text-foreground",
         "focus:outline-none focus:ring-2 focus:ring-brand-green focus:border-transparent",
         "hover:border-brand-green/30",
+        disabled && "cursor-not-allowed opacity-50 hover:border-border",
         className
       )}
     >

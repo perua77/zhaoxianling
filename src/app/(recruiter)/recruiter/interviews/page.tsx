@@ -1,8 +1,9 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback, Suspense } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useRouter, useSearchParams } from "next/navigation";
+
 import { USER_ROLE_LABELS } from "@/lib/constants";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -70,6 +71,7 @@ interface ApplicationWithProcess {
   age?: number;
   assigned_recruiter_id?: string;
   created_at: string;
+  updated_at?: string;
   job_title?: string;
   interviews: InterviewRecord[];
   trials: TrialRecord[];
@@ -155,6 +157,14 @@ const SORT_OPTIONS = [
 ];
 
 export default function InterviewsPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center py-20">加载中...</div>}>
+      <InterviewsPageContent />
+    </Suspense>
+  );
+}
+
+function InterviewsPageContent() {
   const { userId, roles, loading: authLoading } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -181,53 +191,53 @@ export default function InterviewsPage() {
   const [rejectModal, setRejectModal] = useState<{ interviewId: string; application: ApplicationWithProcess } | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
-  useEffect(() => {
-    if (authLoading) {
-      return;
-    }
-    
+  const fetchData = useCallback(async () => {
     if (!userId) {
       setLoading(false);
       return;
     }
 
-    const fetchData = async () => {
-      setLoading(true);
+    setLoading(true);
 
-      try {
-        const userRole = roles.includes("interviewer") && !roles.includes("recruiter") ? "interviewer" : "recruiter";
-        const [interviewsResponse, usersResponse] = await Promise.all([
-          fetch(`/api/recruiter/interviews?userId=${userId}&role=${userRole}`),
-          fetch("/api/recruiter/users"),
-        ]);
+    try {
+      const userRole = roles.includes("interviewer") && !roles.includes("recruiter") ? "interviewer" : "recruiter";
+      const [interviewsResponse, usersResponse] = await Promise.all([
+        fetch(`/api/recruiter/interviews?userId=${userId}&role=${userRole}`),
+        fetch("/api/recruiter/users"),
+      ]);
 
-        const interviewsResult = await interviewsResponse.json();
-        const usersResult = await usersResponse.json();
+      const interviewsResult = await interviewsResponse.json();
+      const usersResult = await usersResponse.json();
 
-        if (interviewsResult.success) {
-          setApplications(interviewsResult.data as ApplicationWithProcess[]);
-        } else {
-          console.error("Failed to fetch interviews:", interviewsResult.error);
-          setApplications([]);
-        }
-
-        if (usersResult.success) {
-          setAdminUsers(usersResult.data as AdminUser[]);
-        } else {
-          console.error("Failed to fetch admin users:", usersResult.error);
-          setAdminUsers([]);
-        }
-      } catch (error) {
-        console.error("Failed to fetch data:", error);
+      if (interviewsResult.success) {
+        setApplications(interviewsResult.data as ApplicationWithProcess[]);
+      } else {
+        console.error("Failed to fetch interviews:", interviewsResult.error);
         setApplications([]);
-        setAdminUsers([]);
-      } finally {
-        setLoading(false);
       }
-    };
+
+      if (usersResult.success) {
+        setAdminUsers(usersResult.data as AdminUser[]);
+      } else {
+        console.error("Failed to fetch admin users:", usersResult.error);
+        setAdminUsers([]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch data:", error);
+      setApplications([]);
+      setAdminUsers([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [userId, roles]);
+
+  useEffect(() => {
+    if (authLoading) {
+      return;
+    }
 
     fetchData();
-  }, [userId, authLoading]);
+  }, [authLoading, fetchData]);
 
   useEffect(() => {
     const params = new URLSearchParams();
@@ -287,6 +297,7 @@ export default function InterviewsPage() {
       scheduled_at: "",
       location: "",
       interviewer_id: "",
+      contact_person_id: "",
       contact_person: "",
       contact_phone: "",
     });

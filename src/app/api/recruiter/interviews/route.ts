@@ -232,10 +232,10 @@ export async function POST(request: Request) {
 
       case "submit-evaluation": {
         const { interviewId, evaluation, result } = body;
-        
+
         const { data: interview, error: getError } = await supabase
           .from("interviews")
-          .select("application_id, job_id")
+          .select("application_id, job_id, interviewer_id")
           .eq("id", interviewId)
           .single();
 
@@ -243,13 +243,13 @@ export async function POST(request: Request) {
 
         const { data: app, error: appError } = await supabase
           .from("applications")
-          .select("candidate_id")
+          .select("candidate_id, assigned_recruiter_id")
           .eq("id", interview.application_id)
           .single();
 
         const { data: job, error: jobError } = await supabase
           .from("jobs")
-          .select("title")
+          .select("title, recruiter_id")
           .eq("id", interview.job_id)
           .single();
 
