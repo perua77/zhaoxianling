@@ -4,7 +4,7 @@ import { createServerClient } from "@supabase/ssr";
 /**
  * 路由守卫中间件
  * - 未登录用户访问受保护页面 → 重定向到 /login
- * - 已登录用户访问 /login → 重定向到 /home
+ * - 已登录用户访问 /login → 根据角色重定向
  */
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -33,17 +33,19 @@ export async function middleware(request: NextRequest) {
   });
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    process.env.NEXT_PUBLIC_SUPABASE_URL || "",
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
     {
       cookies: {
         getAll() {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            response.cookies.set(name, value, options);
-          });
+          if (cookiesToSet && Array.isArray(cookiesToSet)) {
+            cookiesToSet.forEach(({ name, value, options }) => {
+              response.cookies.set(name, value, options);
+            });
+          }
         },
       },
     }
@@ -54,13 +56,22 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getSession();
 
   // 已登录访问 /login → 根据角色重定向
-  if (session && pathname === "/login") {
-    const { data: profile } = await supabase.from("profiles").select("roles").eq("id", session.user.id).single();
-    const roles = profile?.roles || [];
-    
-    if (roles.includes("recruiter") || roles.includes("interviewer") || roles.includes("vendor")) {
-      return NextResponse.redirect(new URL("/recruiter/dashboard", request.url));
-    } else {
+  if (session && session.user && pathname === "/login") {
+    try {
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("roles")
+        .eq("id", session.user.id)
+        .single();
+      const roles = profile?.roles || [];
+
+      if (roles.includes("recruiter") || roles.includes("interviewer") || roles.includes("vendor")) {
+        return NextResponse.redirect(new URL("/recruiter/dashboard", request.url));
+      } else {
+        return NextResponse.redirect(new URL("/home", request.url));
+      }
+    } catch (error) {
+      console.error("[Middleware] 查询用户角色失败:", error);
       return NextResponse.redirect(new URL("/home", request.url));
     }
   }

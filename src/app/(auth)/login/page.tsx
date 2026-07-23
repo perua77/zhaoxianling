@@ -2,7 +2,7 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
@@ -18,9 +18,9 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [fullName, setFullName] = useState("");
   const [mode, setMode] = useState<"login" | "register">("login");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [phoneError, setPhoneError] = useState<string | null>(null);
+  
+  const { login, register, loading, error, reset } = useAuth();
 
   const validatePhone = (value: string) => {
     const phoneRegex = /^1[3-9]\d{9}$/;
@@ -35,72 +35,47 @@ export default function LoginPage() {
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
-    setLoading(true);
-    setError(null);
     setPhoneError(null);
+    
+    // 清除之前的错误信息
+    if (error) {
+      useAuth.setState({ error: null });
+    }
 
-    const supabase = createClient();
+    if (tab === "candidate") {
+      const validationError = validatePhone(phone);
+      if (validationError) {
+        setPhoneError(validationError);
+        return;
+      }
 
-    try {
-      if (tab === "candidate") {
-        const validationError = validatePhone(phone);
-        if (validationError) {
-          setPhoneError(validationError);
-          setLoading(false);
-          return;
-        }
-
-        if (mode === "login") {
-          const { error: loginError } = await supabase.auth.signInWithPassword({
-            email: `${phone}@zhaoxianling.cn`,
-            password,
-          });
-          if (loginError) throw loginError;
+      if (mode === "login") {
+        const result = await login(`${phone}@zhaoxianling.cn`, password);
+        if (result.success) {
           router.push("/home");
-        } else {
-          const { data, error: signupError } = await supabase.auth.signUp({
-            email: `${phone}@zhaoxianling.cn`,
-            password,
-            options: {
-              emailRedirectTo: `${window.location.origin}/home`,
-              data: {
-                full_name: fullName,
-                phone,
-                role: "candidate",
-              },
-            },
-          });
-          if (signupError) throw signupError;
-
-          if (data.user) {
-            try {
-              await supabase.from("profiles").upsert({
-                id: data.user.id,
-                roles: ["candidate"],
-                full_name: fullName,
-                phone,
-              });
-            } catch (profileError) {
-              console.warn("Failed to create profile:", profileError);
-            }
-          }
-
-          if (data.session) {
-            router.push("/home");
-          } else {
-            setError("注册成功！请使用手机号登录");
-            setMode("login");
-          }
         }
       } else {
-        const { error: loginError } = await supabase.auth.signInWithPassword({
-          email,
-          password,
-        });
-        if (loginError) throw loginError;
-
-        const { data: profile } = await supabase.from("profiles").select("roles").limit(1).single();
-        const roles = profile?.roles || [];
+        const result = await register(phone, password, fullName);
+        if (result.success) {
+          if (result.requireLogin) {
+            alert("注册成功！请使用手机号登录");
+            setMode("login");
+            setPhone(phone);
+          } else {
+            router.push("/home");
+          }
+        }
+      }
+    } else {
+      if (!email || !password) {
+        useAuth.setState({ error: "请填写邮箱和密码" });
+        return;
+      }
+      
+      const result = await login(email, password);
+      if (result.success) {
+        const state = useAuth.getState();
+        const roles = state.user?.roles || [];
         
         if (roles.includes("recruiter") || roles.includes("interviewer") || roles.includes("vendor")) {
           router.push("/recruiter/dashboard");
@@ -108,17 +83,6 @@ export default function LoginPage() {
           router.push("/home");
         }
       }
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "操作失败，请重试";
-      if (message.includes("Invalid login credentials")) {
-        setError("账号或密码错误");
-      } else if (message.includes("Email rate limit exceeded")) {
-        setError("请求过于频繁，请稍后再试");
-      } else {
-        setError(message);
-      }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -137,7 +101,8 @@ export default function LoginPage() {
               onClick={() => {
                 setTab("candidate");
                 setMode("login");
-                setError(null);
+                reset();
+                setPhoneError(null);
               }}
               className={cn(
                 "flex-1 rounded-md py-2.5 text-sm font-medium transition-colors",
@@ -153,7 +118,7 @@ export default function LoginPage() {
               onClick={() => {
                 setTab("admin");
                 setMode("login");
-                setError(null);
+                reset();
               }}
               className={cn(
                 "flex-1 rounded-md py-2.5 text-sm font-medium transition-colors",
@@ -233,7 +198,7 @@ export default function LoginPage() {
                       type="button"
                       onClick={() => {
                         setMode("login");
-                        setError(null);
+                        reset();
                       }}
                       className="w-full py-2 text-sm text-brand-green hover:text-brand-green-dark transition-colors"
                     >
@@ -274,9 +239,9 @@ export default function LoginPage() {
             )}
 
             {error && (
-              <p className="rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600">
+              <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-600">
                 {error}
-              </p>
+              </div>
             )}
 
             {tab === "candidate" && mode === "login" && (
@@ -284,7 +249,7 @@ export default function LoginPage() {
                 type="button"
                 onClick={() => {
                   setMode("register");
-                  setError(null);
+                  reset();
                 }}
                 className="w-full py-2 text-sm text-brand-green hover:text-brand-green-dark transition-colors"
               >

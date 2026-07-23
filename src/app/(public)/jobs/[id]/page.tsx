@@ -9,11 +9,12 @@ import {
   DOMAIN_LABELS,
   EMPLOYMENT_TYPE_LABELS,
 } from "@/lib/constants";
+import { useAuth } from "@/hooks/useAuth";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, UserPlus } from "lucide-react";
 
 const mockJobs: Job[] = [
   {
@@ -129,8 +130,11 @@ function getSalaryUnit(employmentType: Job["employment_type"]): string {
 
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>();
+  const { roles } = useAuth();
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const isReferrer = roles?.includes("referrer");
 
   useEffect(() => {
     const timeoutId = setTimeout(() => {
@@ -265,12 +269,20 @@ export default function JobDetailPage() {
               </div>
             )}
 
-            <div className="pt-4 border-t">
+            <div className="pt-4 border-t space-y-3">
               <Link href={`/jobs/${job.id}/apply`}>
                 <Button size="lg" variant="primary" className="w-full">
                   立即投递
                 </Button>
               </Link>
+              {isReferrer && (
+                <Link href={`/jobs/${job.id}/apply?mode=refer`}>
+                  <Button size="lg" variant="outline" className="w-full">
+                    <UserPlus className="mr-2" size={18} />
+                    推荐候选人
+                  </Button>
+                </Link>
+              )}
             </div>
           </div>
         </CardContent>

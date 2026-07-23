@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 
@@ -14,9 +14,10 @@ interface DashboardStats {
 }
 
 export default function DashboardPage() {
-  const { userId, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const userId = user?.id;
 
   useEffect(() => {
     if (authLoading) {

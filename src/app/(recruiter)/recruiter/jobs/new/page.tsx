@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -9,13 +9,24 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Textarea } from "@/components/ui/Textarea";
 import { Label } from "@/components/ui/Label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import { DOMAIN_LABELS, EMPLOYMENT_TYPE_LABELS } from "@/lib/constants";
+import { getRegions } from "@/lib/region-data";
 import type { JobDomain, EmploymentType } from "@/lib/types";
 
 interface FormData {
   title: string;
   domain: JobDomain;
   employment_type: EmploymentType;
+  province: string;
+  city: string;
+  district: string;
   location: string;
   salary_min: string;
   salary_max: string;
@@ -42,6 +53,9 @@ export default function NewJobPage() {
     title: "",
     domain: "supermarket",
     employment_type: "fulltime",
+    province: "",
+    city: "",
+    district: "",
     location: "",
     salary_min: "",
     salary_max: "",
@@ -50,13 +64,20 @@ export default function NewJobPage() {
     requirements: "",
   });
 
+  const provinces = useMemo(() => getRegions(), []);
+  const cities = useMemo(() => getRegions(formData.province), [formData.province]);
+  const districts = useMemo(() => getRegions(formData.province, formData.city), [formData.province, formData.city]);
+
   const [errors, setErrors] = useState<Partial<Record<keyof FormData, string>>>({});
 
   const validate = (): boolean => {
     const newErrors: Partial<Record<keyof FormData, string>> = {};
 
     if (!formData.title.trim()) newErrors.title = "请输入岗位名称";
-    if (!formData.location.trim()) newErrors.location = "请输入工作地点";
+    if (!formData.province) newErrors.province = "请选择省份";
+    if (!formData.city) newErrors.city = "请选择城市";
+    if (!formData.district) newErrors.district = "请选择区县";
+    if (!formData.location.trim()) newErrors.location = "请输入详细地址";
     if (!formData.salary_min || isNaN(Number(formData.salary_min))) newErrors.salary_min = "请输入有效的最低薪资";
     if (!formData.salary_max || isNaN(Number(formData.salary_max))) newErrors.salary_max = "请输入有效的最高薪资";
     if (Number(formData.salary_min) > Number(formData.salary_max)) newErrors.salary_max = "最高薪资不能低于最低薪资";
@@ -81,11 +102,15 @@ export default function NewJobPage() {
     const supabase = createClient();
 
     try {
+      const fullLocation = `${formData.province}${formData.city}${formData.district}${formData.location.trim()}`;
       const { error } = await supabase.from("jobs").insert({
         title: formData.title.trim(),
         domain: formData.domain,
         employment_type: formData.employment_type,
-        location: formData.location.trim(),
+        province: formData.province,
+        city: formData.city,
+        district: formData.district,
+        location: fullLocation,
         salary_min: Number(formData.salary_min),
         salary_max: Number(formData.salary_max),
         salary_unit: formData.salary_unit,
@@ -192,16 +217,80 @@ export default function NewJobPage() {
                 </div>
               </div>
 
-              <div>
-                <Label htmlFor="location">工作地点 *</Label>
-                <Input
-                  id="location"
-                  placeholder="请输入工作地点"
-                  value={formData.location}
-                  onChange={(e) => handleChange("location", e.target.value)}
-                  error={errors.location}
-                />
-              </div>
+              <div className="space-y-4">
+                  <Label>省市区 *</Label>
+                  <div className="flex gap-2">
+                    <Select
+                      value={formData.province}
+                      onValueChange={(value) => {
+                        setFormData((prev) => ({ ...prev, province: value, city: "", district: "" }));
+                        if (errors.province) setErrors((prev) => ({ ...prev, province: undefined }));
+                      }}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="请选择省份" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {provinces.map((province) => (
+                          <SelectItem key={province} value={province}>
+                            {province}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={formData.city}
+                      onValueChange={(value) => {
+                        setFormData((prev) => ({ ...prev, city: value, district: "" }));
+                        if (errors.city) setErrors((prev) => ({ ...prev, city: undefined }));
+                      }}
+                      disabled={!formData.province}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="请选择城市" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {cities.map((city) => (
+                          <SelectItem key={city} value={city}>
+                            {city}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+
+                    <Select
+                      value={formData.district}
+                      onValueChange={(value) => {
+                        setFormData((prev) => ({ ...prev, district: value }));
+                        if (errors.district) setErrors((prev) => ({ ...prev, district: undefined }));
+                      }}
+                      disabled={!formData.city}
+                    >
+                      <SelectTrigger className="flex-1">
+                        <SelectValue placeholder="请选择区县" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {districts.map((district) => (
+                          <SelectItem key={district} value={district}>
+                            {district}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div>
+                  <Label htmlFor="location">详细地址 *</Label>
+                  <Input
+                    id="location"
+                    placeholder="请输入详细地址（如：张杨路500号一楼）"
+                    value={formData.location}
+                    onChange={(e) => handleChange("location", e.target.value)}
+                    error={errors.location}
+                  />
+                </div>
 
               <div className="grid grid-cols-3 gap-4">
                 <div>

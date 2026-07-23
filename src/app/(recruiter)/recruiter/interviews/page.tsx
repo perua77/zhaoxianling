@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
+import { useRouter, useSearchParams } from "next/navigation";
 import { USER_ROLE_LABELS } from "@/lib/constants";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -10,6 +11,7 @@ import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Textarea } from "@/components/ui/Textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/Select";
+import { Combobox, type ComboboxItem } from "@/components/ui/Combobox";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { Calendar, Clock, MapPin, FileText, CheckCircle2, ArrowRight, Phone, User, Briefcase } from "lucide-react";
@@ -30,6 +32,7 @@ interface InterviewRecord {
   interviewer_id: string;
   scheduled_at: string;
   location: string;
+  contact_person_id?: string;
   contact_person?: string;
   contact_phone?: string;
   status: string;
@@ -37,6 +40,8 @@ interface InterviewRecord {
   evaluation?: string;
   checked_in_at?: string;
   created_at: string;
+  response_status?: string;
+  response_reason?: string;
 }
 
 interface TrialRecord {
@@ -76,6 +81,7 @@ interface ExpandState {
   applicationId: string;
   mode: ExpandMode;
   interviewId?: string;
+  reschedule?: boolean;
 }
 
 const INTERVIEW_STATUS_LABELS: Record<string, string> = {
@@ -104,6 +110,18 @@ const INTERVIEW_RESULT_COLORS: Record<string, string> = {
   pending: "bg-yellow-100 text-yellow-700",
 };
 
+const RESPONSE_STATUS_LABELS: Record<string, string> = {
+  pending: "待响应",
+  accepted: "已接受",
+  rejected: "已拒绝",
+};
+
+const RESPONSE_STATUS_COLORS: Record<string, string> = {
+  pending: "bg-blue-100 text-blue-700",
+  accepted: "bg-green-100 text-green-700",
+  rejected: "bg-red-100 text-red-700",
+};
+
 const TRIAL_STATUS_LABELS: Record<string, string> = {
   pending: "待确认",
   active: "试用中",
@@ -118,10 +136,32 @@ const TRIAL_STATUS_COLORS: Record<string, string> = {
   terminated: "bg-red-100 text-red-700",
 };
 
+const FILTER_OPTIONS = [
+  { value: "", label: "全部" },
+  { value: "scheduled", label: "待面试" },
+  { value: "pass", label: "面试通过" },
+  { value: "fail", label: "面试未通过" },
+  { value: "cancelled", label: "面试取消" },
+  { value: "no_show", label: "未到场" },
+  { value: "trial_active", label: "试岗中" },
+  { value: "hired", label: "已录用" },
+];
+
+const SORT_OPTIONS = [
+  { value: "scheduled_at_desc", label: "面试时间倒序" },
+  { value: "scheduled_at_asc", label: "面试时间正序" },
+  { value: "updated_at_desc", label: "进入当前阶段时间倒序" },
+  { value: "updated_at_asc", label: "进入当前阶段时间正序" },
+];
+
 export default function InterviewsPage() {
   const { userId, roles, loading: authLoading } = useAuth();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [applications, setApplications] = useState<ApplicationWithProcess[]>([]);
   const [adminUsers, setAdminUsers] = useState<AdminUser[]>([]);
+  const [filterStatus, setFilterStatus] = useState(() => searchParams.get("status") || "");
+  const [sortBy, setSortBy] = useState(() => searchParams.get("sort") || "scheduled_at_desc");
   const [loading, setLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
   const [expandState, setExpandState] = useState<ExpandState | null>(null);
@@ -129,6 +169,7 @@ export default function InterviewsPage() {
     scheduled_at: "",
     location: "",
     interviewer_id: "",
+    contact_person_id: "",
     contact_person: "",
     contact_phone: "",
   });
@@ -137,6 +178,8 @@ export default function InterviewsPage() {
   const [interviewResult, setInterviewResult] = useState<string>("");
   const [trialFeedback, setTrialFeedback] = useState("");
   const [hireConfirmModal, setHireConfirmModal] = useState<string | null>(null);
+  const [rejectModal, setRejectModal] = useState<{ interviewId: string; application: ApplicationWithProcess } | null>(null);
+  const [rejectReason, setRejectReason] = useState("");
 
   useEffect(() => {
     if (authLoading) {
@@ -186,6 +229,14 @@ export default function InterviewsPage() {
     fetchData();
   }, [userId, authLoading]);
 
+  useEffect(() => {
+    const params = new URLSearchParams();
+    if (filterStatus) params.set("status", filterStatus);
+    if (sortBy !== "scheduled_at_desc") params.set("sort", sortBy);
+    const paramString = params.toString();
+    router.replace(paramString ? `?${paramString}` : window.location.pathname, { scroll: false });
+  }, [filterStatus, sortBy, router]);
+
   const handleAction = async (action: string, body: Record<string, unknown>) => {
     try {
       const response = await fetch(`/api/recruiter/interviews?action=${action}&userId=${userId}`, {
@@ -210,15 +261,27 @@ export default function InterviewsPage() {
   };
 
   const handleScheduleInterview = async (applicationId: string, jobId: string) => {
-    await handleAction("schedule-interview", {
-      applicationId,
-      jobId,
-      scheduled_at: interviewForm.scheduled_at,
-      location: interviewForm.location,
-      interviewer_id: interviewForm.interviewer_id || userId,
-      contact_person: interviewForm.contact_person,
-      contact_phone: interviewForm.contact_phone,
-    });
+    const isReschedule = expandState?.reschedule && expandState?.interviewId;
+    if (isReschedule) {
+      await handleAction("reschedule-interview", {
+        interviewId: expandState.interviewId,
+        scheduled_at: interviewForm.scheduled_at,
+        location: interviewForm.location,
+        interviewer_id: interviewForm.interviewer_id || userId,
+        contact_person: interviewForm.contact_person,
+        contact_phone: interviewForm.contact_phone,
+      });
+    } else {
+      await handleAction("schedule-interview", {
+        applicationId,
+        jobId,
+        scheduled_at: interviewForm.scheduled_at,
+        location: interviewForm.location,
+        interviewer_id: interviewForm.interviewer_id || userId,
+        contact_person: interviewForm.contact_person,
+        contact_phone: interviewForm.contact_phone,
+      });
+    }
     setExpandState(null);
     setInterviewForm({
       scheduled_at: "",
@@ -269,6 +332,23 @@ export default function InterviewsPage() {
     setHireConfirmModal(null);
   };
 
+  const handleAcceptInterview = async (interviewId: string) => {
+    await handleAction("accept-interview", { interviewId });
+    fetchData();
+  };
+
+  const handleRejectInterview = async () => {
+    if (!rejectModal || !rejectReason.trim()) return;
+    await handleAction("reject-interview", {
+      interviewId: rejectModal.interviewId,
+      reason: rejectReason,
+      candidateName: rejectModal.application.full_name,
+    });
+    setRejectModal(null);
+    setRejectReason("");
+    fetchData();
+  };
+
   const formatDateTime = (dateString: string) => {
     return new Date(dateString).toLocaleString("zh-CN", {
       month: "2-digit",
@@ -315,12 +395,79 @@ export default function InterviewsPage() {
     return user?.full_name || "未知";
   };
 
+  const interviewerItems = useMemo<ComboboxItem[]>(() => {
+    return adminUsers
+      .filter((user) => user.roles.includes("interviewer"))
+      .map((user) => ({
+        value: user.id,
+        label: user.full_name || user.id,
+        phone: user.phone,
+        email: (user as { email?: string }).email,
+      }));
+  }, [adminUsers]);
+
+  const contactItems = useMemo<ComboboxItem[]>(() => {
+    return adminUsers
+      .filter((user) =>
+        user.roles.some((role) => ["interviewer", "referrer", "recruiter"].includes(role))
+      )
+      .map((user) => ({
+        value: user.id,
+        label: user.full_name || user.id,
+        phone: user.phone,
+        email: (user as { email?: string }).email,
+      }));
+  }, [adminUsers]);
+
   const getGenderLabel = (gender?: string) => {
     if (!gender) return "保密";
     if (gender === "男" || gender === "male") return "男";
     if (gender === "女" || gender === "female") return "女";
     return "保密";
   };
+
+  const filteredApplications = applications.filter((app) => {
+    if (!filterStatus) return true;
+    
+    const latestInterview = app.interviews[app.interviews.length - 1];
+    const latestTrial = app.trials[app.trials.length - 1];
+    
+    switch (filterStatus) {
+      case "scheduled":
+        return latestInterview?.status === "scheduled";
+      case "pass":
+        return latestInterview?.result === "pass";
+      case "fail":
+        return latestInterview?.result === "fail";
+      case "cancelled":
+        return latestInterview?.status === "cancelled";
+      case "no_show":
+        return latestInterview?.status === "no_show";
+      case "trial_active":
+        return latestTrial?.status === "active";
+      case "hired":
+        return app.status === "hired" || app.status === "accepted";
+      default:
+        return true;
+    }
+  });
+
+  const sortedApplications = [...filteredApplications].sort((a, b) => {
+    const latestA = a.interviews[a.interviews.length - 1];
+    const latestB = b.interviews[b.interviews.length - 1];
+    
+    let dateA: Date, dateB: Date;
+    
+    if (sortBy === "scheduled_at_desc" || sortBy === "scheduled_at_asc") {
+      dateA = new Date(latestA?.scheduled_at || a.created_at || Date.now());
+      dateB = new Date(latestB?.scheduled_at || b.created_at || Date.now());
+    } else {
+      dateA = new Date(a.updated_at || a.created_at || Date.now());
+      dateB = new Date(b.updated_at || b.created_at || Date.now());
+    }
+    
+    return sortBy.includes("desc") ? dateB.getTime() - dateA.getTime() : dateA.getTime() - dateB.getTime();
+  });
 
   if (loading) {
     return (
@@ -380,7 +527,71 @@ export default function InterviewsPage() {
         </div>
       )}
 
-      {applications.length === 0 ? (
+      {rejectModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-xl p-6 w-full max-w-md">
+            <h3 className="text-xl font-bold mb-4">拒绝面试安排</h3>
+            <Textarea
+              value={rejectReason}
+              onChange={(e) => setRejectReason(e.target.value)}
+              placeholder="如时间冲突，建议改到..."
+              rows={4}
+              className="mb-4"
+            />
+            <div className="flex gap-3">
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => {
+                  setRejectModal(null);
+                  setRejectReason("");
+                }}
+                className="flex-1"
+              >
+                取消
+              </Button>
+              <Button
+                type="button"
+                className="flex-1 bg-red-600 hover:bg-red-700"
+                onClick={handleRejectInterview}
+                disabled={!rejectReason.trim()}
+              >
+                确认拒绝
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="mb-6 flex gap-4">
+        <Select value={filterStatus} onValueChange={setFilterStatus}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="筛选条件" />
+          </SelectTrigger>
+          <SelectContent>
+            {FILTER_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+
+        <Select value={sortBy} onValueChange={setSortBy}>
+          <SelectTrigger className="w-[200px]">
+            <SelectValue placeholder="排序方式" />
+          </SelectTrigger>
+          <SelectContent>
+            {SORT_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {sortedApplications.length === 0 ? (
         <EmptyState
           icon={Calendar}
           title="暂无面试安排"
@@ -388,7 +599,7 @@ export default function InterviewsPage() {
         />
       ) : (
         <div className="space-y-6">
-          {applications.map((app) => {
+          {sortedApplications.map((app) => {
             const processStep = getProcessStep(app);
             const latestInterview = app.interviews[app.interviews.length - 1];
             const latestTrial = app.trials[app.trials.length - 1];
@@ -485,6 +696,11 @@ export default function InterviewsPage() {
                                   <Badge className={INTERVIEW_STATUS_COLORS[interview.status]}>
                                     {INTERVIEW_STATUS_LABELS[interview.status]}
                                   </Badge>
+                                  {interview.response_status && (
+                                    <Badge className={RESPONSE_STATUS_COLORS[interview.response_status]}>
+                                      {RESPONSE_STATUS_LABELS[interview.response_status]}
+                                    </Badge>
+                                  )}
                                 </div>
                                 <div className="text-sm text-gray-600 mt-1 space-y-1">
                                   <span className="flex items-center gap-1">
@@ -516,6 +732,48 @@ export default function InterviewsPage() {
                                   <div className="mt-2 text-sm text-gray-600 bg-white p-2 rounded">
                                     <span className="font-medium">面评：</span>
                                     {interview.evaluation}
+                                  </div>
+                                )}
+                                {interview.response_status === "rejected" && (
+                                  <div className="mt-2 bg-orange-50 border border-orange-200 rounded-lg p-3">
+                                    <p className="text-sm text-orange-800 font-medium">⚠️ 面试官已拒绝此面试安排</p>
+                                    {interview.response_reason && (
+                                      <p className="text-sm text-orange-700 mt-1">拒绝理由：{interview.response_reason}</p>
+                                    )}
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="sm"
+                                      className="mt-2"
+                                      onClick={() =>
+                                        setExpandState({
+                                          applicationId: app.id,
+                                          mode: "interview",
+                                          interviewId: interview.id,
+                                          reschedule: true,
+                                        })
+                                      }
+                                    >
+                                      重新安排
+                                    </Button>
+                                  </div>
+                                )}
+                                {interview.response_status === "pending" && interview.status === "scheduled" && (
+                                  <div className="mt-2 flex gap-2">
+                                    <Button
+                                      type="button"
+                                      className="bg-[#185A56] hover:bg-[#185A56]/90 text-white"
+                                      onClick={() => handleAcceptInterview(interview.id)}
+                                    >
+                                      接受
+                                    </Button>
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      onClick={() => setRejectModal({ interviewId: interview.id, application: app })}
+                                    >
+                                      拒绝
+                                    </Button>
                                   </div>
                                 )}
                                 {!interview.result && (
@@ -617,49 +875,35 @@ export default function InterviewsPage() {
                               </div>
                               <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                  <Label htmlFor="interviewer">面试人</Label>
-                                  <Select
+                                  <Label htmlFor="interviewer">面试官</Label>
+                                  <Combobox
                                     value={interviewForm.interviewer_id}
                                     onValueChange={(value) =>
                                       setInterviewForm({ ...interviewForm, interviewer_id: value })
                                     }
-                                  >
-                                    <SelectTrigger id="interviewer">
-                                      <SelectValue placeholder="请选择面试人" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {adminUsers.map((user) => (
-                                        <SelectItem key={user.id} value={user.id}>
-                                          {user.full_name} ({user.phone})
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                    items={interviewerItems}
+                                    placeholder="请选择面试官"
+                                    searchPlaceholder="搜索面试官姓名..."
+                                    emptyMessage="暂无面试官角色用户"
+                                  />
                                 </div>
                                 <div>
                                   <Label htmlFor="contact_person">面试联系人</Label>
-                                  <Select
-                                    value={interviewForm.contact_person}
-                                    onValueChange={(value) => {
-                                      const selectedUser = adminUsers.find((u) => u.id === value);
+                                  <Combobox
+                                    value={interviewForm.contact_person_id}
+                                    onValueChange={(value, item) => {
                                       setInterviewForm({
                                         ...interviewForm,
-                                        contact_person: selectedUser?.full_name || "",
-                                        contact_phone: selectedUser?.phone || "",
+                                        contact_person_id: value,
+                                        contact_person: item?.label || "",
+                                        contact_phone: item?.phone || "",
                                       });
                                     }}
-                                  >
-                                    <SelectTrigger id="contact_person">
-                                      <SelectValue placeholder="请选择联系人" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                      {adminUsers.map((user) => (
-                                        <SelectItem key={user.id} value={user.id}>
-                                          {user.full_name} ({user.phone})
-                                        </SelectItem>
-                                      ))}
-                                    </SelectContent>
-                                  </Select>
+                                    items={contactItems}
+                                    placeholder="请选择联系人"
+                                    searchPlaceholder="搜索联系人姓名..."
+                                    emptyMessage="暂无可用联系人"
+                                  />
                                 </div>
                               </div>
                               <div className="grid grid-cols-2 gap-4">

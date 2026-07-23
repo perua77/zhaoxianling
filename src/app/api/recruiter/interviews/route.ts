@@ -197,6 +197,7 @@ export async function POST(request: Request) {
           contact_person,
           contact_phone,
           status: "scheduled",
+          response_status: "pending",
         });
 
         if (insertError) throw insertError;
@@ -284,6 +285,23 @@ export async function POST(request: Request) {
               : `很遗憾，你在「${job.title}」岗位的面试中未通过。感谢你的投递，祝你早日找到合适的工作！${evaluation ? '\n\n面试官评价：' + evaluation : ''}`;
             
             await sendMessage(app.candidate_id, "result", title, content);
+
+            const { data: candidateProfile } = await supabase
+              .from("profiles")
+              .select("full_name")
+              .eq("id", app.candidate_id)
+              .single();
+
+            const recruiterId = app.assigned_recruiter_id || job.recruiter_id;
+
+            if (recruiterId && recruiterId !== userId && interview.interviewer_id === userId) {
+              const recruiterTitle = interviewResult === "pass" ? "面试通过" : "面试未通过";
+              const recruiterContent = interviewResult === "pass"
+                ? `${candidateProfile?.full_name || '候选人'} 的面试（${job.title}）已通过，面评：${evaluation || '无'}`
+                : `${candidateProfile?.full_name || '候选人'} 的面试（${job.title}）未通过，面评：${evaluation || '无'}`;
+              
+              await sendMessage(recruiterId, "result", recruiterTitle, recruiterContent);
+            }
           }
         }
         
@@ -380,6 +398,189 @@ export async function POST(request: Request) {
         }
 
         return NextResponse.json({ success: true, message: "反馈提交成功" });
+      }
+
+      case "accept-interview": {
+        const { interviewId } = body;
+        
+        const { data: interview, error: getError } = await supabase
+          .from("interviews")
+          .select("*, interviewer_id, response_status, application_id, job_id, scheduled_at")
+          .eq("id", interviewId)
+          .single();
+
+        if (getError) throw getError;
+        if (!interview) {
+          return NextResponse.json(
+            { success: false, error: "Interview not found" },
+            { status: 404 }
+          );
+        }
+
+        if (interview.interviewer_id !== userId) {
+          return NextResponse.json(
+            { success: false, error: "Unauthorized to accept interview" },
+            { status: 403 }
+          );
+        }
+
+        if (interview.response_status !== "pending") {
+          return NextResponse.json(
+            { success: false, error: "Interview already responded" },
+            { status: 400 }
+          );
+        }
+
+        const { error } = await supabase
+          .from("interviews")
+          .update({ response_status: "accepted" })
+          .eq("id", interviewId);
+
+        if (error) throw error;
+
+        const { data: app } = await supabase
+          .from("applications")
+          .select("candidate_id, assigned_recruiter_id")
+          .eq("id", interview.application_id)
+          .single();
+
+        const { data: job } = await supabase
+          .from("jobs")
+          .select("title, recruiter_id")
+          .eq("id", interview.job_id)
+          .single();
+
+        const { data: interviewerProfile } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", interview.interviewer_id)
+          .single();
+
+        const { data: candidateProfile } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", app?.candidate_id)
+          .single();
+
+        const recruiterId = app?.assigned_recruiter_id || job?.recruiter_id;
+
+        if (recruiterId && recruiterId !== userId) {
+          const dateStr = new Date(interview.scheduled_at).toLocaleString("zh-CN", {
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+
+          await sendMessage(
+            recruiterId,
+            "interview",
+            "面试邀请已接受",
+            `面试官 ${interviewerProfile?.full_name || '未知'} 已接受面试安排：${job?.title || '未知岗位'} - ${candidateProfile?.full_name || '候选人'}，面试时间：${dateStr}`
+          );
+        }
+
+        return NextResponse.json({ success: true, message: "已接受面试安排" });
+      }
+
+      case "reschedule-interview": {
+        const { interviewId, scheduled_at, location, interviewer_id, contact_person, contact_phone } = body;
+        
+        const { data: interview, error: getError } = await supabase
+          .from("interviews")
+          .select("application_id, job_id")
+          .eq("id", interviewId)
+          .single();
+
+        if (getError) throw getError;
+
+        const { data: app, error: appError } = await supabase
+          .from("applications")
+          .select("candidate_id")
+          .eq("id", interview.application_id)
+          .single();
+
+        const { data: job, error: jobError } = await supabase
+          .from("jobs")
+          .select("title")
+          .eq("id", interview.job_id)
+          .single();
+
+        const { error } = await supabase
+          .from("interviews")
+          .update({
+            scheduled_at,
+            location,
+            interviewer_id: interviewer_id || userId,
+            contact_person,
+            contact_phone,
+            response_status: "pending",
+            response_reason: null,
+          })
+          .eq("id", interviewId);
+
+        if (error) throw error;
+
+        if (app && job) {
+          const dateStr = new Date(scheduled_at).toLocaleString("zh-CN", {
+            month: "2-digit",
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+          
+          await sendMessage(
+            app.candidate_id,
+            "interview",
+            "面试安排已更新",
+            `你投递的「${job.title}」岗位面试安排已更新。面试时间：${dateStr}，地点：${location || '未指定'}${contact_person ? '，联系人：' + contact_person : ''}${contact_phone ? '，联系电话：' + contact_phone : ''}`
+          );
+        }
+
+        return NextResponse.json({ success: true, message: "面试重新安排成功" });
+      }
+
+      case "reject-interview": {
+        const { interviewId, reason, candidateName } = body;
+        
+        const { data: interview, error: getError } = await supabase
+          .from("interviews")
+          .select("application_id, job_id, interviewer_id")
+          .eq("id", interviewId)
+          .single();
+
+        if (getError) throw getError;
+
+        const { data: job, error: jobError } = await supabase
+          .from("jobs")
+          .select("recruiter_id, title")
+          .eq("id", interview.job_id)
+          .single();
+
+        const { data: interviewer, error: interviewerError } = await supabase
+          .from("profiles")
+          .select("full_name")
+          .eq("id", interview.interviewer_id)
+          .single();
+
+        const { error } = await supabase
+          .from("interviews")
+          .update({ response_status: "rejected", response_reason: reason })
+          .eq("id", interviewId);
+
+        if (error) throw error;
+
+        if (job && interviewer) {
+          const reasonText = reason && reason.trim() ? reason : "未提供拒绝理由";
+          await sendMessage(
+            job.recruiter_id,
+            "interview",
+            "面试官拒绝了面试安排",
+            `面试官 ${interviewer.full_name} 拒绝了 ${candidateName} 的面试安排。理由：${reasonText}。请重新安排面试时间。`
+          );
+        }
+
+        return NextResponse.json({ success: true, message: "已拒绝面试安排" });
       }
 
       case "hire": {

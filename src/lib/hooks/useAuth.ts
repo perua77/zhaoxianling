@@ -1,109 +1,266 @@
 "use client";
 
 import { create } from "zustand";
-import type { User } from "@supabase/supabase-js";
-import { createClient } from "@/lib/supabase/client";
 import type { Profile, UserRole } from "@/lib/types";
+import { createClient } from "@/lib/supabase/client";
+
+interface Session {
+  access_token: string;
+  refresh_token: string;
+  expires_in: number;
+}
+
+interface AuthUser {
+  id: string;
+  email: string;
+  fullName: string;
+  phone: string;
+  roles: UserRole[];
+}
 
 interface AuthState {
-  user: User | null;
+  user: AuthUser | null;
   profile: Profile | null;
   role: UserRole | null;
+  session: Session | null;
   loading: boolean;
   error: string | null;
 
-  /** 初始化：订阅 Supabase auth 状态变化 */
-  init: () => () => void;
-  /** 从 profiles 表拉取当前用户资料 */
+  init: () => void;
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>;
+  register: (phone: string, password: string, fullName: string) => Promise<{ success: boolean; error?: string; requireLogin?: boolean }>;
   fetchProfile: (userId: string) => Promise<void>;
-  /** 登出 */
   signOut: () => Promise<void>;
-  /** 清空状态 */
   reset: () => void;
 }
 
-let _supabase: ReturnType<typeof createClient> | null = null;
-function getSupabase() {
-  if (!_supabase) {
-    _supabase = createClient();
+const STORAGE_KEY = "auth_session";
+const USER_KEY = "auth_user";
+
+function loadFromStorage(): { user: AuthUser | null; session: Session | null } {
+  if (typeof window === "undefined") {
+    return { user: null, session: null };
   }
-  return _supabase;
+  
+  try {
+    const userStr = localStorage.getItem(USER_KEY);
+    const sessionStr = localStorage.getItem(STORAGE_KEY);
+    
+    const user = userStr ? JSON.parse(userStr) : null;
+    const session = sessionStr ? JSON.parse(sessionStr) : null;
+    
+    if (session) {
+      const now = Date.now();
+      if (session.expires_at && now > session.expires_at) {
+        localStorage.removeItem(STORAGE_KEY);
+        localStorage.removeItem(USER_KEY);
+        return { user: null, session: null };
+      }
+    }
+    
+    return { user, session };
+  } catch {
+    return { user: null, session: null };
+  }
+}
+
+function saveToStorage(user: AuthUser, session: Session) {
+  if (typeof window === "undefined") return;
+  
+  const sessionWithExpiry = {
+    ...session,
+    expires_at: Date.now() + (session.expires_in * 1000) - 60000,
+  };
+  
+  localStorage.setItem(USER_KEY, JSON.stringify(user));
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(sessionWithExpiry));
+}
+
+function clearStorage() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem(STORAGE_KEY);
+  localStorage.removeItem(USER_KEY);
 }
 
 export const useAuth = create<AuthState>((set, get) => ({
   user: null,
   profile: null,
   role: null,
-  loading: true,
+  session: null,
+  loading: false,
   error: null,
 
   init: () => {
-    const client = getSupabase();
-    // 订阅认证状态变化
-    const { data: authListener } = client.auth.onAuthStateChange(
-      async (event, session) => {
-        const currentUser = session?.user ?? null;
+    const { user, session } = loadFromStorage();
+    
+    if (user && session) {
+      set({ 
+        user, 
+        session, 
+        role: user.roles?.[0] || "candidate",
+      });
 
-        set({ user: currentUser, loading: !!currentUser });
+      const supabase = createClient();
+      supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        token_type: "bearer",
+        expires_in: session.expires_in,
+        expires_at: Math.floor(Date.now() / 1000) + session.expires_in,
+      }).catch((err) => {
+        console.warn("Failed to restore Supabase session:", err);
+      });
+    }
+  },
 
-        if (currentUser) {
-          await get().fetchProfile(currentUser.id);
-        } else {
-          set({ profile: null, role: null, loading: false });
-        }
+  login: async (email: string, password: string) => {
+    set({ loading: true, error: null });
+    
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ email, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        const errorMsg = data.error || "登录失败";
+        set({ error: errorMsg, loading: false });
+        return { success: false, error: errorMsg };
       }
-    );
 
-    // 返回取消订阅函数
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
+      const { user, session } = data;
+      saveToStorage(user, session);
+      
+      set({ 
+        user, 
+        session,
+        role: user.roles?.[0] || "candidate",
+        loading: false,
+        error: null 
+      });
+
+      const supabase = createClient();
+      await supabase.auth.setSession({
+        access_token: session.access_token,
+        refresh_token: session.refresh_token,
+        token_type: "bearer",
+        expires_in: session.expires_in,
+        expires_at: Math.floor(Date.now() / 1000) + session.expires_in,
+      }).catch((err) => {
+        console.warn("Failed to sync Supabase session:", err);
+      });
+
+      get().fetchProfile(user.id);
+
+      return { success: true };
+    } catch (err: any) {
+      const errorMsg = err?.message?.includes("Failed to fetch") 
+        ? "网络连接失败，请检查网络后重试"
+        : "登录请求失败，请稍后重试";
+      set({ error: errorMsg, loading: false });
+      return { success: false, error: errorMsg };
+    }
+  },
+
+  register: async (phone: string, password: string, fullName: string) => {
+    set({ loading: true, error: null });
+    
+    try {
+      const response = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ phone, password, fullName }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        const errorMsg = data.error || "注册失败";
+        set({ error: errorMsg, loading: false });
+        return { success: false, error: errorMsg };
+      }
+
+      set({ loading: false, error: null });
+      return { success: true, requireLogin: data.requireLogin };
+    } catch (err: any) {
+      const errorMsg = "注册请求失败，请稍后重试";
+      set({ error: errorMsg, loading: false });
+      return { success: false, error: errorMsg };
+    }
   },
 
   fetchProfile: async (userId: string) => {
     try {
-      set({ loading: true, error: null });
+      const { session } = get();
+      const headers: Record<string, string> = {};
+      if (session?.access_token) {
+        headers["Authorization"] = `Bearer ${session.access_token}`;
+      }
 
-      const client = getSupabase();
-      const { data, error } = await client
-        .from("profiles")
-        .select("*")
-        .eq("id", userId)
-        .single();
+      const response = await fetch(`/api/profile/${userId}`, {
+        headers,
+      });
 
-      if (error) {
-        console.warn("Profile fetch error:", error.message);
-        set({ profile: null, role: "candidate" as UserRole });
+      if (!response.ok) {
+        console.warn("Profile fetch failed:", response.status);
         return;
       }
 
-      const profileData = data as Profile;
-      const primaryRole = profileData.roles?.[0] || "candidate";
-      set({ profile: profileData, role: primaryRole as UserRole });
+      const data = await response.json();
+      if (data.success && data.profile) {
+        const profileData = data.profile as Profile;
+        const primaryRole = profileData.roles?.[0] || "candidate";
+        set({ profile: profileData, role: primaryRole as UserRole });
+      }
     } catch (err) {
       console.warn("Profile fetch exception:", err);
-      set({
-        profile: null,
-        role: "candidate" as UserRole,
-      });
-    } finally {
-      set({ loading: false });
     }
   },
 
   signOut: async () => {
     try {
-      const client = getSupabase();
-      await client.auth.signOut();
-      set({ user: null, profile: null, role: null, error: null });
+      const supabase = createClient();
+      await supabase.auth.signOut();
     } catch (err) {
-      set({
-        error: err instanceof Error ? err.message : "登出失败",
-      });
+      console.warn("Supabase sign out error:", err);
     }
+    
+    clearStorage();
+    set({ 
+      user: null, 
+      profile: null, 
+      role: null, 
+      session: null,
+      error: null 
+    });
   },
 
   reset: () => {
-    set({ user: null, profile: null, role: null, loading: false, error: null });
+    clearStorage();
+    set({ 
+      user: null, 
+      profile: null, 
+      role: null, 
+      session: null,
+      loading: false, 
+      error: null 
+    });
   },
 }));
+
+export function getAuthHeaders(): Record<string, string> {
+  const { session } = useAuth.getState();
+  if (session?.access_token) {
+    return {
+      "Authorization": `Bearer ${session.access_token}`,
+    };
+  }
+  return {};
+}

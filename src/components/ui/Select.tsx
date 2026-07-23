@@ -97,32 +97,38 @@ export function Select({
 
   const selectedLabel = findSelectedLabel();
 
+  const triggerChild = React.Children.map(children, (child) => {
+    if (React.isValidElement(child) && child.type === SelectTrigger) {
+      return React.cloneElement(child as React.ReactElement, { ref: triggerRef });
+    }
+    return null;
+  });
+
   return (
     <div className={cn("relative", className)}>
       <SelectContext.Provider value={{ value, onValueChange, open, setOpen, selectedLabel }}>
-        {children}
+        {triggerChild}
+        {open && (
+          <div
+            ref={contentRef}
+            className={cn(
+              "absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-auto rounded-lg border border-border bg-background py-1 shadow-md"
+            )}
+          >
+            {React.Children.map(children, (child) => {
+              if (React.isValidElement(child) && child.type === SelectContent) {
+                return child;
+              }
+              return null;
+            })}
+          </div>
+        )}
       </SelectContext.Provider>
-      {open && (
-        <div
-          ref={contentRef}
-          className={cn(
-            "absolute left-0 right-0 top-full z-50 mt-1 max-h-60 overflow-auto rounded-lg border border-border bg-background py-1 shadow-md"
-          )}
-        >
-          {React.Children.map(children, (child) => {
-            if (React.isValidElement(child) && child.type === SelectContent) {
-              return child;
-            }
-            return null;
-          })}
-        </div>
-      )}
     </div>
   );
 }
 
 export function SelectTrigger({ className, id, children }: SelectTriggerProps) {
-  const triggerRef = useRef<HTMLButtonElement>(null);
   const context = useContext(SelectContext);
   if (!context) return null;
 
@@ -144,7 +150,6 @@ export function SelectTrigger({ className, id, children }: SelectTriggerProps) {
 
   return (
     <button
-      ref={triggerRef}
       id={id}
       onClick={() => setOpen(!open)}
       className={cn(
@@ -157,7 +162,7 @@ export function SelectTrigger({ className, id, children }: SelectTriggerProps) {
       {renderChildren()}
       <ChevronDown
         size={16}
-        className="text-muted-foreground"
+        className={cn("text-muted-foreground transition-transform", open && "rotate-180")}
       />
     </button>
   );

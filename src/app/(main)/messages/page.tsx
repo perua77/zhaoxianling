@@ -7,7 +7,7 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { MESSAGE_TYPE_LABELS } from "@/lib/constants";
 import type { Message } from "@/lib/types";
-import { MessageSquare, Clock, FileText, CheckCircle, AlertCircle, Calendar } from "lucide-react";
+import { MessageSquare, Clock, FileText, CheckCircle, AlertCircle, Calendar, Circle } from "lucide-react";
 
 function getMessageIcon(type: Message["type"]) {
   switch (type) {
@@ -95,16 +95,23 @@ export default function MessagesPage() {
             <Card
               key={msg.id}
               className={`cursor-pointer transition-all ${
-                !msg.is_read ? "ring-1 ring-brand-green/30" : ""
+                !msg.is_read ? "ring-1 ring-brand-green/30 bg-brand-green/5" : ""
               }`}
               onClick={() => markAsRead(msg.id)}
             >
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
-                    <Icon className="h-5 w-5 text-brand-green" />
+                    <div className="relative">
+                      <Icon className={`h-5 w-5 ${!msg.is_read ? 'text-brand-green' : 'text-gray-400'}`} />
+                      {!msg.is_read && (
+                        <Circle className="absolute -top-1 -right-1 h-2 w-2 fill-brand-green text-brand-green" />
+                      )}
+                    </div>
                     <div>
-                      <CardTitle className="text-base">{msg.title}</CardTitle>
+                      <CardTitle className={`text-base ${!msg.is_read ? 'font-bold' : 'font-normal'}`}>
+                        {msg.title}
+                      </CardTitle>
                       <Badge variant="muted" className="mt-1">
                         {MESSAGE_TYPE_LABELS[msg.type]}
                       </Badge>
@@ -116,7 +123,9 @@ export default function MessagesPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <p className="text-sm text-gray-700 mb-2 whitespace-pre-wrap">{msg.content}</p>
+                <p className={`text-sm text-gray-700 mb-2 whitespace-pre-wrap ${!msg.is_read ? 'font-medium' : ''}`}>
+                  {msg.content}
+                </p>
                 <p className="text-xs text-gray-500">
                   {new Date(msg.created_at).toLocaleString("zh-CN")}
                 </p>
