@@ -129,8 +129,8 @@ export default function InterviewsPage() {
                     </div>
                     {interview.application_status && (
                       <div className="mt-2">
-                        <Badge variant="outline" className={APPLICATION_STATUS_COLORS[interview.application_status] || ""}>
-                          申请状态：{APPLICATION_STATUS_LABELS[interview.application_status] || interview.application_status}
+                        <Badge variant="outline" className={(APPLICATION_STATUS_COLORS as Record<string, string>)[interview.application_status] || ""}>
+                          申请状态：{(APPLICATION_STATUS_LABELS as Record<string, string>)[interview.application_status] || interview.application_status}
                         </Badge>
                       </div>
                     )}
