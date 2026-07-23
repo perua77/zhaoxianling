@@ -69,7 +69,7 @@ export async function POST(request: Request) {
   }
 }
 
-export async function sendMessage(recipient_id: string, type: string, title: string, content: string) {
+async function sendMessage(recipient_id: string, type: string, title: string, content: string) {
   try {
     const { error } = await supabase.from("messages").insert({
       recipient_id,
