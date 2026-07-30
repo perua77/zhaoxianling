@@ -1,0 +1,7 @@
+-- 【已废弃 / 请勿执行】
+-- 排查后确认：数据库 trial_status 枚举实际合法值为
+--   pending | confirmed | completed | cancelled
+-- 本次 bug（invalid input value for enum trial_status: "active"）已通过
+-- 修改应用代码将试岗状态对齐到上述合法值来修复（active->confirmed, terminated->cancelled），
+-- 数据库枚举无需任何改动。
+-- 保留本文件仅作历史记录，切勿执行任何 ALTER TYPE ... ADD VALUE，以免污染枚举。

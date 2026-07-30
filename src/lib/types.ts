@@ -34,7 +34,8 @@ export type ApplicationStatus =
   | "offering" // 发放offer
   | "hired" // 已录用
   | "accepted" // 已录用（兼容旧数据）
-  | "rejected"; // 已拒绝
+  | "rejected" // 已拒绝
+  | "terminated"; // 已终止流程
 
 // 消息类型
 export type MessageType =
@@ -45,8 +46,9 @@ export type MessageType =
   | "checkin" // 签到提醒
   | "reminder"; // 其他提醒
 
-// 试用状态
-export type TrialStatus = "active" | "completed" | "terminated";
+// 试用状态（对齐数据库 trial_status 枚举：pending | confirmed | completed | cancelled）
+// confirmed=试岗进行中，cancelled=已终止
+export type TrialStatus = "pending" | "confirmed" | "completed" | "cancelled";
 
 // 面试形式
 export type InterviewFormat = "online" | "onsite";
@@ -101,10 +103,14 @@ export interface Application {
   status: ApplicationStatus;
   full_name?: string; // 姓名
   phone?: string; // 手机号
+  wechat?: string; // 微信号
   email?: string; // 邮箱
   self_introduction?: string; // 自我介绍
   cover_letter?: string; // 自荐信
   resume_url?: string; // 简历链接
+  terminated_at?: string; // 终止时间
+  terminated_by?: string; // 终止操作人 profile.id
+  terminate_reason?: string; // 终止原因
   created_at: string;
   updated_at: string;
 }
@@ -161,4 +167,29 @@ export interface JobAssignment {
   job_id: string;
   recruiter_id: string;
   created_at: string;
+}
+
+// 入职状态
+export type OnboardingStatus =
+  | "pending_confirmation" // 待候选人确认
+  | "confirmed" // 候选人已确认
+  | "onboarded" // 已入职
+  | "cancelled"; // 已取消
+
+// 入职记录
+export interface Onboarding {
+  id: string;
+  application_id: string;
+  job_id: string;
+  candidate_id: string;
+  recruiter_id: string;
+  onboard_date: string; // DATE
+  onboard_location: string;
+  contact_person: string;
+  contact_phone: string;
+  onboard_notes?: string;
+  status: OnboardingStatus;
+  confirmed_at?: string;
+  created_at: string;
+  updated_at: string;
 }

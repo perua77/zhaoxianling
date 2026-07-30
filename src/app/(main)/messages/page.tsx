@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { MESSAGE_TYPE_LABELS } from "@/lib/constants";
@@ -28,19 +29,16 @@ function getMessageIcon(type: Message["type"]) {
 export default function MessagesPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(true);
+  const user = useAuth((state) => state.user);
 
   useEffect(() => {
+    if (!user) {
+      const timer = setTimeout(() => setLoading(false), 1500);
+      return () => clearTimeout(timer);
+    }
     async function fetchMessages() {
-      const supabase = createClient();
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (!user) {
-          setLoading(false);
-          return;
-        }
-
-        const response = await fetch(`/api/messages?userId=${user.id}`);
+        const response = await fetch(`/api/messages?userId=${user!.id}`);
         const result = await response.json();
 
         if (result.success && result.data && result.data.length > 0) {
@@ -53,13 +51,11 @@ export default function MessagesPage() {
     }
 
     fetchMessages();
-  }, []);
+  }, [user]);
 
-  const markAsRead = async (messageId: string) => {
+   const markAsRead = async (messageId: string) => {
     const supabase = createClient();
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      
       if (!user) return;
 
       await supabase
@@ -127,7 +123,7 @@ export default function MessagesPage() {
                   {msg.content}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {new Date(msg.created_at).toLocaleString("zh-CN")}
+                  {new Date(msg.created_at).toLocaleString("zh-CN", { timeZone: "Asia/Shanghai" })}
                 </p>
               </CardContent>
             </Card>

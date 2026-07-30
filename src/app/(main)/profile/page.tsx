@@ -9,16 +9,19 @@ import { Label } from "@/components/ui/Label";
 import { Badge } from "@/components/ui/Badge";
 import { USER_ROLE_LABELS } from "@/lib/constants";
 import { User, Phone, Edit2, Save } from "lucide-react";
+import { MyApplicationsTabs } from "@/components/candidate/my-applications-tabs";
 
 export default function ProfilePage() {
   const { user, profile, role, signOut } = useAuth();
   const [isEditing, setIsEditing] = useState(false);
+  const isCandidate = !role || role === "candidate";
   const [formData, setFormData] = useState({
     full_name: "",
     gender: "",
     age: "",
     phone: "",
     bio: "",
+    wechat: "",
   });
   const [message, setMessage] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
@@ -30,6 +33,7 @@ export default function ProfilePage() {
         age: profile.age?.toString() || "",
         phone: profile.phone || "",
         bio: profile.bio || "",
+        wechat: (profile as { wechat?: string }).wechat || "",
       });
     }
   }, [profile, isEditing]);
@@ -48,6 +52,7 @@ export default function ProfilePage() {
           age: formData.age ? parseInt(formData.age) : null,
           phone: formData.phone,
           bio: formData.bio,
+          wechat: formData.wechat,
         }),
       });
 
@@ -182,6 +187,17 @@ export default function ProfilePage() {
             </div>
 
             <div>
+              <Label>微信号</Label>
+              <Input
+                value={formData.wechat}
+                onChange={(e) => setFormData({ ...formData, wechat: e.target.value })}
+                disabled={!isEditing}
+                className="mt-1"
+                placeholder="请输入微信号（选填）"
+              />
+            </div>
+
+            <div>
               <Label>个人简介</Label>
               <textarea
                 value={formData.bio || ""}
@@ -204,6 +220,14 @@ export default function ProfilePage() {
           )}
         </CardContent>
       </Card>
+
+      {isCandidate && (
+        <Card className="mb-4">
+          <CardContent className="pt-6">
+            <MyApplicationsTabs candidateId={user?.id} />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardContent>

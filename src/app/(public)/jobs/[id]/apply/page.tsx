@@ -34,6 +34,7 @@ function ApplyPageContent() {
     gender: "",
     age: "",
     phone: "",
+    wechat: "",
     self_introduction: "",
   });
 
@@ -65,31 +66,44 @@ function ApplyPageContent() {
           ({ data: { user } } = await supabase.auth.getUser());
         }
 
-        if (user) {
-          try {
-            const response = await fetch(`/api/profile?user_id=${user.id}`);
-            const result = await response.json();
+        // 兜底：supabase session 尚未恢复时，直接用 useAuth store 里的用户 id
+        const targetUserId = user?.id || authUser?.id;
 
-            if (result.success && result.data) {
-              const profile = result.data;
-              setRegisteredPhone(profile.phone || null);
-              setApplyForm({
-                full_name: profile.full_name || "",
-                gender: profile.gender || "",
-                age: profile.age?.toString() || "",
-                phone: profile.phone || "",
-                self_introduction: profile.bio || "",
-              });
+        if (targetUserId) {
+          // 网络抖动容错：最多重试 3 次，避免瞬时失败导致个人信息不自动填充
+          const MAX_RETRY = 3;
+          for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
+            try {
+              const response = await fetch(`/api/profile?user_id=${targetUserId}`);
+              const result = await response.json();
+
+              if (result.success && result.data) {
+                const profile = result.data;
+                setRegisteredPhone(profile.phone || null);
+                setApplyForm((prev) => ({
+                  ...prev,
+                  full_name: profile.full_name || "",
+                  gender: profile.gender || "",
+                  age: profile.age?.toString() || "",
+                  phone: profile.phone || "",
+                  self_introduction: profile.bio || "",
+                  wechat: prev.wechat || profile.wechat || "",
+                }));
+              }
+              break;
+            } catch (err) {
+              console.error(`Failed to fetch profile (attempt ${attempt}):`, err);
+              if (attempt < MAX_RETRY) {
+                await new Promise((r) => setTimeout(r, attempt * 400));
+              }
             }
-          } catch (err) {
-            console.error("Failed to fetch profile:", err);
           }
         }
       }
 
       fetchUserProfile();
     }
-  }, [mode, authSession]);
+  }, [mode, authSession, authUser]);
 
   const handleApplySubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -134,6 +148,18 @@ function ApplyPageContent() {
       return;
     }
 
+    const wechatTrimmed = applyForm.wechat.trim();
+    if (!wechatTrimmed) {
+      setMessage({ type: "error", text: "请填写微信号" });
+      setSubmitting(false);
+      return;
+    }
+    if (wechatTrimmed.length < 3 || wechatTrimmed.length > 30) {
+      setMessage({ type: "error", text: "微信号长度需为 3-30 个字符" });
+      setSubmitting(false);
+      return;
+    }
+
     const { error } = await supabase.from("applications").insert({
       job_id: jobId,
       candidate_id: user.id,
@@ -141,6 +167,7 @@ function ApplyPageContent() {
       gender: applyForm.gender,
       age: applyForm.age ? parseInt(applyForm.age) : null,
       phone: applyForm.phone,
+      wechat: wechatTrimmed,
       self_introduction: applyForm.self_introduction,
       status: "pending",
     });
@@ -173,7 +200,7 @@ function ApplyPageContent() {
       
       setMessage({ type: "success", text: "投递成功！我们会尽快处理你的投递" });
       setTimeout(() => {
-        router.push("/my-applications");
+        router.push("/profile");
       }, 2000);
     }
 
@@ -493,6 +520,19 @@ function ApplyPageContent() {
               {registeredPhone && applyForm.phone && applyForm.phone !== registeredPhone && (
                 <p className="mt-1 text-sm text-red-500">电话必须与注册时填写的号码一致</p>
               )}
+            </div>
+
+            <div>
+              <Label htmlFor="wechat">微信号 *</Label>
+              <Input
+                id="wechat"
+                type="text"
+                required
+                value={applyForm.wechat}
+                onChange={(e) => setApplyForm({ ...applyForm, wechat: e.target.value })}
+                placeholder="请输入微信号，方便招聘者联系您"
+                maxLength={30}
+              />
             </div>
 
             <div>

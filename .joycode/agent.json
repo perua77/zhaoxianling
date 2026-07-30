@@ -1,0 +1,13 @@
+{
+  "version": "1.0.0",
+  "agents": [
+    {
+      "agentId": "26eqhnab",
+      "source": "project",
+      "contentPath": "agents/招贤令测试.md",
+      "isActive": true,
+      "ragList": [],
+      "mcpList": []
+    }
+  ]
+}

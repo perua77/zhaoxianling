@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 
 import type { Job } from "@/lib/types";
@@ -14,58 +14,9 @@ import { Button } from "@/components/ui/Button";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { PageContainer } from "@/components/layout/PageContainer";
-import { Briefcase } from "lucide-react";
+import { Briefcase, Search } from "lucide-react";
 
-const mockJobs: Job[] = [
-  {
-    id: "mock-1",
-    recruiter_id: "recruiter-1",
-    title: "超市收银员",
-    description: "负责超市收银工作，处理顾客结账，维护收银台整洁，提供优质顾客服务。要求有责任心，沟通能力强。",
-    domain: "supermarket",
-    employment_type: "fulltime",
-    salary_min: 4500,
-    salary_max: 6000,
-    salary_unit: "月",
-    location: "北京市朝阳区",
-    requirements: "1. 年龄18-35岁\n2. 有收银经验优先\n3. 能适应轮班工作\n4. 持有健康证",
-    is_active: true,
-    created_at: "2024-01-15T10:00:00Z",
-    updated_at: "2024-01-15T10:00:00Z",
-  },
-  {
-    id: "mock-2",
-    recruiter_id: "recruiter-2",
-    title: "仓库管理员",
-    description: "负责仓库日常管理，包括货物入库、出库、盘点、整理等工作。要求熟悉仓库操作流程，能吃苦耐劳。",
-    domain: "warehouse",
-    employment_type: "hourly",
-    salary_min: 25,
-    salary_max: 32,
-    salary_unit: "时",
-    location: "上海市浦东新区",
-    requirements: "1. 年龄20-45岁\n2. 能熟练操作叉车优先\n3. 有仓库管理经验\n4. 身体健康，能承受体力劳动",
-    is_active: true,
-    created_at: "2024-01-14T09:00:00Z",
-    updated_at: "2024-01-14T09:00:00Z",
-  },
-  {
-    id: "mock-3",
-    recruiter_id: "recruiter-3",
-    title: "销售代表",
-    description: "负责产品销售，开发新客户，维护老客户关系，完成销售目标。要求有良好的沟通能力和销售技巧。",
-    domain: "sales",
-    employment_type: "fulltime",
-    salary_min: 5000,
-    salary_max: 12000,
-    salary_unit: "月",
-    location: "广州市天河区",
-    requirements: "1. 年龄22-40岁\n2. 有销售经验优先\n3. 能适应出差\n4. 有驾照优先",
-    is_active: true,
-    created_at: "2024-01-13T14:00:00Z",
-    updated_at: "2024-01-13T14:00:00Z",
-  },
-];
+
 
 /** 根据雇佣类型推导薪资单位 */
 function getSalaryUnit(employmentType: Job["employment_type"]): string {
@@ -84,14 +35,19 @@ function getSalaryUnit(employmentType: Job["employment_type"]): string {
 export default function HomePage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const filteredJobs = useMemo(
+    () =>
+      jobs.filter(
+        (job) =>
+          job.title?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          job.location?.toLowerCase().includes(searchQuery.toLowerCase())
+      ),
+    [jobs, searchQuery]
+  );
 
   useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      console.warn("[API] Fetch timed out, using mock data");
-      setJobs(mockJobs);
-      setLoading(false);
-    }, 8000);
-
     async function fetchJobs() {
       try {
         const response = await fetch("/api/test-supabase");
@@ -100,20 +56,17 @@ export default function HomePage() {
         if (result.success && result.data && result.data.length > 0) {
           setJobs(result.data as Job[]);
         } else {
-          setJobs(mockJobs);
+          setJobs([]);
         }
       } catch (err) {
         console.error("[API] Error fetching jobs:", err);
-        setJobs(mockJobs);
+        setJobs([]);
       } finally {
-        clearTimeout(timeoutId);
         setLoading(false);
       }
     }
 
     fetchJobs();
-
-    return () => clearTimeout(timeoutId);
   }, []);
 
   if (loading) {
@@ -134,10 +87,22 @@ export default function HomePage() {
         </p>
       </header>
 
+      {/* 搜索框 */}
+      <div className="relative mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+        <input
+          type="text"
+          placeholder="搜索岗位名称、地点..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="w-full rounded-lg border py-2 pl-10 pr-4 focus:outline-none focus:ring-2 focus:ring-[#185A56]"
+        />
+      </div>
+
       {/* 岗位列表 */}
-      {jobs.length > 0 ? (
+      {filteredJobs.length > 0 ? (
         <div className="grid grid-cols-1 gap-4">
-          {jobs.map((job) => (
+          {filteredJobs.map((job) => (
             <Card key={job.id} interactive>
               <CardHeader>
                 <CardTitle className="text-lg text-foreground">
@@ -177,8 +142,8 @@ export default function HomePage() {
       ) : (
         <EmptyState
           icon={Briefcase}
-          title="暂无招聘中的岗位"
-          description="请稍后再来看看更多工作机会"
+          title={searchQuery ? "未找到匹配的岗位" : "暂无招聘中的岗位"}
+          description={searchQuery ? "换个关键词试试" : "请稍后再来看看更多工作机会"}
         />
       )}
     </PageContainer>

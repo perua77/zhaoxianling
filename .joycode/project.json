@@ -1,0 +1,23 @@
+{
+  "id": 63938,
+  "name": "zhaoxianling",
+  "abbrName": "ZH",
+  "description": "",
+  "devMode": 2,
+  "status": null,
+  "url": null,
+  "databaseHost": null,
+  "databasePort": null,
+  "databaseName": null,
+  "databaseUsername": null,
+  "databasePassword": null,
+  "projectInfo": {
+    "JD": {
+      "jd_7a0bfa708bff9": [
+        {
+          "jd_7a0bfa708bff9": 63938
+        }
+      ]
+    }
+  }
+}

@@ -7,9 +7,9 @@ import {
   LayoutDashboard,
   Briefcase,
   ClipboardList,
-  Calendar,
   ClipboardCheck,
   UserPlus,
+  UserCheck,
 } from "lucide-react";
 
 interface MenuSection {
@@ -26,7 +26,7 @@ const menuSections: MenuSection[] = [
       { label: "数据看板", href: "/recruiter/dashboard", icon: LayoutDashboard },
       { label: "岗位列表", href: "/recruiter/jobs", icon: Briefcase },
       { label: "投递管理", href: "/recruiter/applications", icon: ClipboardList },
-      { label: "面试安排", href: "/recruiter/interviews", icon: Calendar },
+      { label: "入职管理", href: "/recruiter/onboarding", icon: UserCheck },
     ],
   },
   {
@@ -94,7 +94,7 @@ export default function RecruiterSidebar() {
 
       <div className="p-4 border-t border-white/10 space-y-3">
         <Link
-          href="/"
+          href="/home"
           className="block px-4 py-2 text-white/70 hover:text-white hover:bg-white/10 rounded-lg transition-colors"
         >
           返回首页

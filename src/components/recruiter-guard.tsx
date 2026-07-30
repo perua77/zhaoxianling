@@ -11,26 +11,33 @@ interface RecruiterGuardProps {
 }
 
 export function RecruiterGuard({ children }: RecruiterGuardProps) {
-  const { roles, loading } = useAuth();
+  const { userId, roles, loading } = useAuth();
   const router = useRouter();
 
+  // 登录态恢复中：已恢复 userId 但 profile(roles) 尚未拉取到。
+  // 此时不能判定为“无权限”，否则会在 profile 到达前白屏 / 误跳转。
+  const restoring = Boolean(userId) && roles.length === 0;
+
   useEffect(() => {
-    if (!loading && roles) {
-      const hasPermission = roles.some((role) =>
-        ALLOWED_ROLES.includes(role)
-      );
+    // 仅在确定“已登录但无权限”或“未登录”时才跳转
+    if (loading || restoring) return;
 
-      if (!hasPermission) {
-        router.push("/");
-      }
+    if (!userId) {
+      router.push("/login");
+      return;
     }
-  }, [roles, loading, router]);
 
-  if (loading) {
+    const hasPermission = roles.some((role) => ALLOWED_ROLES.includes(role));
+    if (!hasPermission) {
+      router.push("/");
+    }
+  }, [userId, roles, loading, restoring, router]);
+
+  if (loading || restoring) {
     return <div className="flex items-center justify-center min-h-screen">加载中...</div>;
   }
 
-  if (!roles) {
+  if (!userId) {
     return null;
   }
 

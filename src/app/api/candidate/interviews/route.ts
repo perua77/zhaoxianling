@@ -25,7 +25,7 @@ export async function GET(request: Request) {
 
     interface ApplicationData { id: string; job_id: string; status: string; }
     interface JobData { id: string; title: string; }
-    interface InterviewData { id: string; application_id: string; job_id: string; scheduled_at: string; location: string; contact_person?: string; contact_phone?: string; status: string; result?: string; evaluation?: string; }
+    interface InterviewData { id: string; application_id: string; job_id: string; scheduled_at: string; location: string; contact_person?: string; contact_phone?: string; status: string; result?: string; created_at?: string; }
 
     const appIds = (applications as ApplicationData[] || []).map((a) => a.id);
 
@@ -47,20 +47,33 @@ export async function GET(request: Request) {
 
     const { data: interviews } = await supabase
       .from("interviews")
-      .select("id, application_id, job_id, scheduled_at, location, contact_person, contact_phone, status, result, evaluation")
-      .in("application_id", appIds)
-      .order("scheduled_at", { ascending: true });
+      .select("id, application_id, job_id, scheduled_at, location, contact_person, contact_phone, status, result, created_at")
+   .in("application_id", appIds)
+      .order("created_at", { ascending: true });
+
+    // 计算每条面试在其投递中的轮次（按创建先后顺序编号，不受 scheduled_at 时区差异影响）
+    // 取消的面试不占轮次，沿用当前计数，与招聘者端保持一致
+    const interviewIdToRound = new Map<string, number>();
+    const appRunningCount = new Map<string, number>();
+    (interviews as InterviewData[] || []).forEach((int) => {
+      let next = appRunningCount.get(int.application_id) || 0;
+      if (int.status !== "cancelled") {
+        next += 1;
+        appRunningCount.set(int.application_id, next);
+      }
+      interviewIdToRound.set(int.id, next === 0 ? 1 : next);
+    });
 
     const result = (interviews as InterviewData[] || []).map((int) => ({
       id: int.id,
       job_title: jobMap.get(int.job_id),
       scheduled_at: int.scheduled_at,
       location: int.location,
-      contact_person: int.contact_person,
+  contact_person: int.contact_person,
       contact_phone: int.contact_phone,
       status: int.status,
       result: int.result,
-      evaluation: int.evaluation,
+      round: interviewIdToRound.get(int.id) || 1,
       application_status: appStatusMap.get(int.application_id),
     }));
 

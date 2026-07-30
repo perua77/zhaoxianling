@@ -30,6 +30,9 @@ export async function GET(request: Request) {
         self_introduction,
         status,
         referrer_id,
+        terminated_at,
+        terminated_by,
+        terminate_reason,
         created_at,
         updated_at,
         jobs (
@@ -39,7 +42,27 @@ export async function GET(request: Request) {
           salary_min,
           salary_max,
           salary_unit,
-          domain
+          domain,
+          employment_type
+        ),
+        trials (
+          id,
+          start_date,
+          location
+        ),
+        interviews (
+          id,
+          contact_person,
+          contact_phone
+        ),
+        onboarding (
+          id,
+          status,
+          onboard_date,
+          onboard_location,
+          contact_person,
+          contact_phone,
+          onboard_notes
         )
       `)
       .eq("candidate_id", candidate_id)

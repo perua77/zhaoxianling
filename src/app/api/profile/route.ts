@@ -9,7 +9,7 @@ export async function PUT(request: Request) {
 
   try {
     const body = await request.json();
-    const { id, full_name, gender, age, phone, company, bio } = body;
+    const { id, full_name, gender, age, phone, company, bio, wechat } = body;
 
     if (!id) {
       return NextResponse.json({
@@ -28,6 +28,7 @@ export async function PUT(request: Request) {
         phone,
         company,
         bio,
+        wechat: wechat ?? null,
       });
 
     if (error) {

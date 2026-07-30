@@ -92,11 +92,11 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   init: () => {
     const { user, session } = loadFromStorage();
-    
+
     if (user && session) {
-      set({ 
-        user, 
-        session, 
+      set({
+        user,
+        session,
         role: user.roles?.[0] || "candidate",
       });
 
@@ -110,7 +110,54 @@ export const useAuth = create<AuthState>((set, get) => ({
       }).catch((err: unknown) => {
         console.warn("Failed to restore Supabase session:", err);
       });
+
+      // 恢复登录态后主动拉取 profile，避免刷新/重新进入时 profile 为空
+      // （否则个人中心显示空白、投递页无法自动填充）
+      get().fetchProfile(user.id);
+      return;
     }
+
+    // localStorage 无登录态，但 Supabase cookie 可能仍有效（middleware 用 cookie 判断，
+    // 若不从 cookie 回退恢复，会出现「服务端放行 200、客户端却认为未登录 → 白屏」）。
+    set({ loading: true });
+    const supabase = createClient();
+    supabase.auth
+      .getUser()
+      .then(async ({ data: { user: authUser } }: Awaited<ReturnType<typeof supabase.auth.getUser>>) => {
+        if (!authUser) {
+          set({ loading: false });
+          return;
+        }
+
+        const { data: sessionData } = await supabase.auth.getSession();
+        const sess = sessionData.session;
+
+        const restoredUser: AuthUser = {
+          id: authUser.id,
+          email: authUser.email || "",
+          fullName: (authUser.user_metadata?.full_name as string) || "",
+          phone: authUser.phone || "",
+          roles: [],
+        };
+        const restoredSession: Session | null = sess
+          ? {
+              access_token: sess.access_token,
+              refresh_token: sess.refresh_token,
+              expires_in: sess.expires_in ?? 3600,
+            }
+          : null;
+
+        set({ user: restoredUser, session: restoredSession });
+        if (restoredSession) {
+          saveToStorage(restoredUser, restoredSession);
+        }
+        await get().fetchProfile(authUser.id);
+        set({ loading: false });
+      })
+      .catch((err: unknown) => {
+        console.warn("Failed to restore session from cookie:", err);
+        set({ loading: false });
+      });
   },
 
   login: async (email: string, password: string) => {
@@ -197,30 +244,40 @@ export const useAuth = create<AuthState>((set, get) => ({
   },
 
   fetchProfile: async (userId: string) => {
-    try {
-      const { session } = get();
-      const headers: Record<string, string> = {};
-      if (session?.access_token) {
-        headers["Authorization"] = `Bearer ${session.access_token}`;
-      }
+    const { session } = get();
+    const headers: Record<string, string> = {};
+    if (session?.access_token) {
+      headers["Authorization"] = `Bearer ${session.access_token}`;
+    }
 
-      const response = await fetch(`/api/profile/${userId}`, {
-        headers,
-      });
+    // 网络抖动容错：最多重试 3 次（指数退避），避免瞬时失败导致 profile 为空
+    const MAX_RETRY = 3;
+    for (let attempt = 1; attempt <= MAX_RETRY; attempt++) {
+      try {
+        const response = await fetch(`/api/profile/${userId}`, { headers });
 
-      if (!response.ok) {
-        console.warn("Profile fetch failed:", response.status);
+        if (!response.ok) {
+          console.warn(`Profile fetch failed (attempt ${attempt}):`, response.status);
+          if (attempt < MAX_RETRY) {
+            await new Promise((r) => setTimeout(r, attempt * 400));
+            continue;
+          }
+          return;
+        }
+
+        const data = await response.json();
+        if (data.success && data.profile) {
+          const profileData = data.profile as Profile;
+          const primaryRole = profileData.roles?.[0] || "candidate";
+          set({ profile: profileData, role: primaryRole as UserRole });
+        }
         return;
+      } catch (err) {
+        console.warn(`Profile fetch exception (attempt ${attempt}):`, err);
+        if (attempt < MAX_RETRY) {
+          await new Promise((r) => setTimeout(r, attempt * 400));
+        }
       }
-
-      const data = await response.json();
-      if (data.success && data.profile) {
-        const profileData = data.profile as Profile;
-        const primaryRole = profileData.roles?.[0] || "candidate";
-        set({ profile: profileData, role: primaryRole as UserRole });
-      }
-    } catch (err) {
-      console.warn("Profile fetch exception:", err);
     }
   },
 

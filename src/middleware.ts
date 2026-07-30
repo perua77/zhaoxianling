@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { getHomePathByRoles } from "@/lib/auth-redirect";
 
 /**
  * 路由守卫中间件
@@ -25,7 +26,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // 创建 Supabase 客户端读取 session
+  // 创建 Supabase 客户端读取用户身份
   const response = NextResponse.next({
     request: {
       headers: request.headers,
@@ -51,25 +52,30 @@ export async function middleware(request: NextRequest) {
     }
   );
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
+  // 使用 getUser() 而非 getSession()：getUser() 会向 Supabase Auth 服务端校验，
+  // 确保用户身份可信（getSession() 直接读 cookie，服务端存在安全隐患）
+  let user = null;
+  try {
+    const {
+      data: { user: authUser },
+    } = await supabase.auth.getUser();
+    user = authUser;
+  } catch (error) {
+    console.error("[Middleware] getUser 失败:", error);
+    user = null;
+  }
 
-  // 已登录访问 /login → 根据角色重定向
-  if (session && session.user && pathname === "/login") {
+  // 已登录访问 /login 或根路径 / → 根据角色重定向到对应首页
+  if (user && (pathname === "/login" || pathname === "/")) {
     try {
       const { data: profile } = await supabase
         .from("profiles")
         .select("roles")
-        .eq("id", session.user.id)
+        .eq("id", user.id)
         .single();
       const roles = profile?.roles || [];
 
-      if (roles.includes("recruiter") || roles.includes("interviewer") || roles.includes("vendor")) {
-        return NextResponse.redirect(new URL("/recruiter/dashboard", request.url));
-      } else {
-        return NextResponse.redirect(new URL("/home", request.url));
-      }
+      return NextResponse.redirect(new URL(getHomePathByRoles(roles), request.url));
     } catch (error) {
       console.error("[Middleware] 查询用户角色失败:", error);
       return NextResponse.redirect(new URL("/home", request.url));
@@ -77,7 +83,7 @@ export async function middleware(request: NextRequest) {
   }
 
   // 未登录访问受保护页面 → 重定向到 /login
-  if (!session && !isPublicPath) {
+  if (!user && !isPublicPath) {
     const redirectUrl = new URL("/login", request.url);
     redirectUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(redirectUrl);

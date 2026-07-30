@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/lib/hooks/useAuth";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
@@ -13,124 +13,32 @@ interface ApplicationWithJob extends Application {
   jobs?: Job;
 }
 
-const mockApplications: ApplicationWithJob[] = [
-  {
-    id: "mock-app-1",
-    job_id: "mock-1",
-    candidate_id: "mock-user",
-    status: "reviewing",
-    full_name: "张三",
-    phone: "13800138000",
-    email: "zhangsan@example.com",
-    self_introduction: "我有3年超市收银经验，工作认真负责，善于与顾客沟通。",
-    created_at: "2024-01-14T15:30:00Z",
-    updated_at: "2024-01-14T15:30:00Z",
-    jobs: {
-      id: "mock-1",
-      recruiter_id: "recruiter-1",
-      title: "超市收银员",
-      description: "负责超市收银工作",
-      domain: "supermarket",
-      employment_type: "fulltime",
-      salary_min: 4500,
-      salary_max: 6000,
-      salary_unit: "月",
-      location: "北京市朝阳区",
-      is_active: true,
-      created_at: "2024-01-15T10:00:00Z",
-      updated_at: "2024-01-15T10:00:00Z",
-    },
-  },
-  {
-    id: "mock-app-2",
-    job_id: "mock-3",
-    candidate_id: "mock-user",
-    status: "pending",
-    full_name: "张三",
-    phone: "13800138000",
-    email: "zhangsan@example.com",
-    self_introduction: "我有5年销售经验，曾担任销售主管，具备良好的团队管理能力。",
-    created_at: "2024-01-13T10:00:00Z",
-    updated_at: "2024-01-13T10:00:00Z",
-    jobs: {
-      id: "mock-3",
-      recruiter_id: "recruiter-3",
-      title: "销售代表",
-      description: "负责产品销售",
-      domain: "sales",
-      employment_type: "fulltime",
-      salary_min: 5000,
-      salary_max: 12000,
-      salary_unit: "月",
-      location: "广州市天河区",
-      is_active: true,
-      created_at: "2024-01-13T14:00:00Z",
-      updated_at: "2024-01-13T14:00:00Z",
-    },
-  },
-  {
-    id: "mock-app-3",
-    job_id: "mock-4",
-    candidate_id: "mock-user",
-    status: "rejected",
-    full_name: "张三",
-    phone: "13800138000",
-    email: "zhangsan@example.com",
-    self_introduction: "我能吃苦耐劳，愿意从基层做起。",
-    created_at: "2024-01-10T09:00:00Z",
-    updated_at: "2024-01-11T14:00:00Z",
-    jobs: {
-      id: "mock-4",
-      recruiter_id: "recruiter-4",
-      title: "工厂操作工",
-      description: "负责生产线操作",
-      domain: "factory",
-      employment_type: "daily",
-      salary_min: 180,
-      salary_max: 220,
-      salary_unit: "日",
-      location: "深圳市宝安区",
-      is_active: true,
-      created_at: "2024-01-12T08:00:00Z",
-      updated_at: "2024-01-12T08:00:00Z",
-    },
-  },
-];
-
 export default function MyApplicationsPage() {
   const [applications, setApplications] = useState<ApplicationWithJob[]>([]);
   const [loading, setLoading] = useState(true);
+  const user = useAuth((state) => state.user);
 
   useEffect(() => {
+    if (!user) {
+      const timer = setTimeout(() => setLoading(false), 1500);
+      return () => clearTimeout(timer);
+    }
     async function fetchApplications() {
-      const supabase = createClient();
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-
-        if (!user) {
-          setApplications(mockApplications);
-          setLoading(false);
-          return;
-        }
-
-        const response = await fetch(`/api/applications?candidate_id=${user.id}`);
+        const response = await fetch(`/api/applications?candidate_id=${user!.id}`);
         const result = await response.json();
 
-        if (result.success && result.data && result.data.length > 0) {
+        if (result.success && result.data) {
           setApplications(result.data as ApplicationWithJob[]);
-        } else {
-          console.log("[API] No applications found, using mock data");
-          setApplications(mockApplications);
         }
       } catch (err) {
         console.error("[API] Error fetching applications:", err);
-        setApplications(mockApplications);
       }
       setLoading(false);
     }
 
     fetchApplications();
-  }, []);
+  }, [user]);
 
   const getStatusBadge = (status: string) => {
     const label = APPLICATION_STATUS_LABELS[status as keyof typeof APPLICATION_STATUS_LABELS] || status;

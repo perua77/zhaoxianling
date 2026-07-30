@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useCallback, type ReactNode, Suspense } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Textarea } from "@/components/ui/Textarea";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { EmptyState } from "@/components/ui/EmptyState";
+import { InterviewCard } from "@/components/interview-card";
 import {
   Select,
   SelectContent,
@@ -15,7 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/Select";
-import { Calendar, MapPin, User, Phone, ClipboardCheck, Clock } from "lucide-react";
+import { Calendar, MapPin, User, Phone, ClipboardCheck, Clock, Briefcase } from "lucide-react";
+import { InterviewsPageContent } from "@/components/recruiter/interviews-management";
 
 const INTERVIEW_FILTER_OPTIONS = [
   { value: "", label: "全部" },
@@ -28,9 +30,9 @@ const INTERVIEW_FILTER_OPTIONS = [
 
 const TRIAL_FILTER_OPTIONS = [
   { value: "", label: "全部" },
-  { value: "active", label: "进行中" },
+  { value: "confirmed", label: "进行中" },
   { value: "completed", label: "已完成" },
-  { value: "terminated", label: "已终止" },
+  { value: "cancelled", label: "已终止" },
 ];
 
 const SORT_OPTIONS = [
@@ -108,20 +110,26 @@ const RESPONSE_STATUS_COLORS: Record<string, string> = {
 };
 
 const TRIAL_STATUS_LABELS: Record<string, string> = {
+  pending: "待开始",
+  confirmed: "进行中",
   active: "进行中",
   completed: "已完成",
+  cancelled: "已终止",
   terminated: "已终止",
 };
 
 const TRIAL_STATUS_COLORS: Record<string, string> = {
+  pending: "bg-gray-100 text-gray-600",
+  confirmed: "bg-blue-100 text-blue-700",
   active: "bg-blue-100 text-blue-700",
   completed: "bg-green-100 text-green-700",
+  cancelled: "bg-red-100 text-red-700",
   terminated: "bg-red-100 text-red-700",
 };
 
 export default function InterviewerTasksPage() {
   const { userId, loading: authLoading } = useAuth();
-  const [activeTab, setActiveTab] = useState<"interview" | "trial">("interview");
+  const [activeTab, setActiveTab] = useState<"process" | "interview" | "trial">("interview");
   const [interviewTasks, setInterviewTasks] = useState<InterviewTask[]>([]);
   const [trialTasks, setTrialTasks] = useState<TrialTask[]>([]);
   const [loading, setLoading] = useState(true);
@@ -132,42 +140,42 @@ export default function InterviewerTasksPage() {
   const [rejectReason, setRejectReason] = useState("");
   const [rejectModal, setRejectModal] = useState<string | null>(null);
   const [trialFeedback, setTrialFeedback] = useState("");
+  const [trialResult, setTrialResult] = useState<"pass" | "fail" | "">("");
   const [filterStatus, setFilterStatus] = useState("");
   const [sortBy, setSortBy] = useState("scheduled_at_desc");
 
-  useEffect(() => {
+  const fetchData = useCallback(async () => {
     if (authLoading || !userId) {
       setLoading(false);
       return;
     }
+    setLoading(true);
+    try {
+      const [interviewsResponse, trialsResponse] = await Promise.all([
+        fetch(`/api/recruiter/interviewer-tasks?userId=${userId}&type=interview`),
+        fetch(`/api/recruiter/interviewer-tasks?userId=${userId}&type=trial`),
+      ]);
 
-    const fetchData = async () => {
-      setLoading(true);
-      try {
-        const [interviewsResponse, trialsResponse] = await Promise.all([
-          fetch(`/api/recruiter/interviewer-tasks?userId=${userId}&type=interview`),
-          fetch(`/api/recruiter/interviewer-tasks?userId=${userId}&type=trial`),
-        ]);
+      const interviewsResult = await interviewsResponse.json();
+      const trialsResult = await trialsResponse.json();
 
-        const interviewsResult = await interviewsResponse.json();
-        const trialsResult = await trialsResponse.json();
-
-        if (interviewsResult.success) {
-          setInterviewTasks(interviewsResult.data as InterviewTask[]);
-        }
-
-        if (trialsResult.success) {
-          setTrialTasks(trialsResult.data as TrialTask[]);
-        }
-      } catch (error) {
-        console.error("Failed to fetch tasks:", error);
-      } finally {
-        setLoading(false);
+      if (interviewsResult.success) {
+        setInterviewTasks(interviewsResult.data as InterviewTask[]);
       }
-    };
 
-    fetchData();
+      if (trialsResult.success) {
+        setTrialTasks(trialsResult.data as TrialTask[]);
+      }
+    } catch (error) {
+      console.error("Failed to fetch tasks:", error);
+    } finally {
+      setLoading(false);
+    }
   }, [userId, authLoading]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleAction = async (action: string, body: Record<string, unknown>) => {
     try {
@@ -194,23 +202,15 @@ export default function InterviewerTasksPage() {
 
   const handleAcceptInterview = async (interviewId: string) => {
     await handleAction("accept-interview", { interviewId });
-    setInterviewTasks((prev) =>
-      prev.map((t) => (t.id === interviewId ? { ...t, response_status: "accepted" } : t))
-    );
+    await fetchData();
   };
 
   const handleRejectInterview = async (interviewId: string) => {
     if (!rejectReason.trim()) return;
     await handleAction("reject-interview", { interviewId, reason: rejectReason });
-    setInterviewTasks((prev) =>
-      prev.map((t) =>
-        t.id === interviewId
-          ? { ...t, response_status: "rejected", response_reason: rejectReason }
-          : t
-      )
-    );
     setRejectModal(null);
     setRejectReason("");
+    await fetchData();
   };
 
   const handleMarkCompleted = async (interviewId: string) => {
@@ -220,56 +220,48 @@ export default function InterviewerTasksPage() {
       result: interviewResult,
       evaluation: evaluationText,
     });
-    setInterviewTasks((prev) =>
-      prev.map((t) =>
-        t.id === interviewId
-          ? { ...t, status: "completed", result: interviewResult, evaluation: evaluationText }
-          : t
-      )
-    );
     setExpandedTask(null);
     setEvaluationText("");
     setInterviewResult("");
+    await fetchData();
   };
 
   const handleMarkNoShow = async (interviewId: string) => {
     await handleAction("mark-no-show", { interviewId });
-    setInterviewTasks((prev) =>
-      prev.map((t) => (t.id === interviewId ? { ...t, status: "no_show" } : t))
-    );
+    await fetchData();
   };
 
   const handleSubmitTrialFeedback = async (trialId: string) => {
-    if (!trialFeedback.trim()) return;
-    await handleAction("submit-trial-feedback", { trialId, feedback: trialFeedback });
-    setTrialTasks((prev) =>
-      prev.map((t) =>
-        t.id === trialId ? { ...t, status: "completed", feedback: trialFeedback } : t
-      )
-    );
+    if (!trialFeedback.trim() || !trialResult) return;
+    await handleAction("submit-trial-feedback", {
+      trialId,
+      feedback: trialFeedback,
+      result: trialResult,
+    });
     setExpandedTask(null);
     setTrialFeedback("");
+    setTrialResult("");
+    await fetchData();
   };
 
   const formatDateTime = (dateString: string) => {
     return new Date(dateString).toLocaleString("zh-CN", {
+      timeZone: "Asia/Shanghai",
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
+      hour12: false,
     });
   };
 
   const formatDate = (dateString: string) => {
     return new Date(dateString).toLocaleDateString("zh-CN", {
+      timeZone: "Asia/Shanghai",
       month: "2-digit",
       day: "2-digit",
       year: "numeric",
     });
-  };
-
-  const isInterviewTimePassed = (scheduledAt: string) => {
-    return new Date(scheduledAt) < new Date();
   };
 
   const filteredAndSortedInterviewTasks = useMemo(() => {
@@ -342,21 +334,28 @@ export default function InterviewerTasksPage() {
 
       <div className="flex gap-2 mb-6">
         <Button
+          variant={activeTab === "process" ? "default" : "outline"}
+          onClick={() => setActiveTab("process")}
+        >
+          <Briefcase size={18} className="mr-2" />
+          流程管理
+        </Button>
+        <Button
           variant={activeTab === "interview" ? "default" : "outline"}
           onClick={() => setActiveTab("interview")}
         >
           <ClipboardCheck size={18} className="mr-2" />
           面试任务 ({interviewTasks.length})
         </Button>
-        <Button
-          variant={activeTab === "trial" ? "default" : "outline"}
-          onClick={() => setActiveTab("trial")}
-        >
-          <Clock size={18} className="mr-2" />
-          试岗任务 ({trialTasks.length})
-        </Button>
       </div>
 
+      {activeTab === "process" && (
+        <Suspense fallback={<LoadingSpinner size="lg" label="加载中..." className="py-20" />}>
+          <InterviewsPageContent embedded />
+        </Suspense>
+      )}
+
+      {activeTab !== "process" && (
       <div className="flex gap-4 mb-6">
         <Select value={filterStatus} onValueChange={setFilterStatus}>
           <SelectTrigger className="w-[180px]">
@@ -384,8 +383,9 @@ export default function InterviewerTasksPage() {
           </SelectContent>
         </Select>
       </div>
+      )}
 
-      {activeTab === "interview" ? (
+      {activeTab !== "process" && (activeTab === "interview" ? (
         filteredAndSortedInterviewTasks.length === 0 ? (
           <EmptyState
             icon={ClipboardCheck}
@@ -394,153 +394,112 @@ export default function InterviewerTasksPage() {
           />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {filteredAndSortedInterviewTasks.map((task) => (
-              <Card key={task.id} className="hover:shadow-lg transition-shadow">
-                <CardContent className="p-6">
-                  <div className="flex items-start justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold">{task.candidate_name}</h3>
-                      <p className="text-sm text-gray-600">{task.job_title}</p>
-                    </div>
-                    <div className="flex gap-2">
-                      <Badge className={INTERVIEW_STATUS_COLORS[task.status]}>
-                        {INTERVIEW_STATUS_LABELS[task.status]}
-                      </Badge>
-                      {task.response_status && (
-                        <Badge className={RESPONSE_STATUS_COLORS[task.response_status]}>
-                          {RESPONSE_STATUS_LABELS[task.response_status]}
-                        </Badge>
-                      )}
-                    </div>
+            {filteredAndSortedInterviewTasks.map((task) => {
+              const resultPending = !task.result || task.result === "pending";
+              const canRespond = task.response_status === "pending" && task.status === "scheduled";
+              // 已接受且结果待评定 → 允许填写面评/反馈结果（不再要求面试时间已过）
+              const canMark =
+                task.response_status === "accepted" &&
+                task.status === "scheduled" &&
+                resultPending;
+              const canEvaluate = task.status === "completed" && !task.evaluation;
+              let actions: ReactNode = null;
+              if (canRespond) {
+                actions = (
+                  <div className="flex gap-2">
+                    <Button
+                      className="bg-[#185A56] hover:bg-[#185A56]/90 text-white"
+                      onClick={() => handleAcceptInterview(task.id)}
+                    >
+                      接受
+                    </Button>
+                    <Button variant="outline" onClick={() => setRejectModal(task.id)}>
+                      拒绝
+                    </Button>
                   </div>
-
-                  <div className="text-sm text-gray-600 space-y-2">
-                    <div className="flex items-center gap-2">
-                      <Calendar size={16} />
-                      {formatDateTime(task.scheduled_at)}
-                      <span className="text-xs text-gray-400">第{task.round}轮</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <MapPin size={16} />
-                      {task.location}
-                    </div>
-                    {task.contact_person && (
-                      <div className="flex items-center gap-2">
-                        <User size={16} />
-                        {task.contact_person}
-                      </div>
-                    )}
-                    {task.contact_phone && (
-                      <div className="flex items-center gap-2">
-                        <Phone size={16} />
-                        {task.contact_phone}
-                      </div>
-                    )}
-                  </div>
-
-                  {task.response_status === "rejected" && task.response_reason && (
-                    <div className="mt-3 text-sm text-gray-500 italic">
-                      拒绝理由：{task.response_reason}
-                    </div>
-                  )}
-
-                  {task.result && (
-                    <div className="mt-3">
-                      <Badge className={INTERVIEW_RESULT_COLORS[task.result]}>
-                        面试结果：{INTERVIEW_RESULT_LABELS[task.result]}
-                      </Badge>
-                    </div>
-                  )}
-
-                  {task.evaluation && (
-                    <div className="mt-3 text-sm text-gray-600 bg-gray-50 p-3 rounded">
-                      <span className="font-medium">面评：</span>
-                      {task.evaluation}
-                    </div>
-                  )}
-
-                  {task.response_status === "pending" && task.status === "scheduled" && (
-                    <div className="mt-4 flex gap-2">
-                      <Button
-                        className="bg-[#185A56] hover:bg-[#185A56]/90 text-white"
-                        onClick={() => handleAcceptInterview(task.id)}
-                      >
-                        接受
-                      </Button>
-                      <Button variant="outline" onClick={() => setRejectModal(task.id)}>
-                        拒绝
-                      </Button>
-                    </div>
-                  )}
-
-                  {task.response_status === "accepted" &&
-                    task.status === "scheduled" &&
-                    isInterviewTimePassed(task.scheduled_at) && (
-                      <div className="mt-4 flex gap-2">
-                        {expandedTask === task.id ? (
-                          <div className="space-y-2 w-full">
-                            <div className="flex gap-2">
-                              <Button
-                                variant={interviewResult === "pass" ? "default" : "outline"}
-                                className={interviewResult === "pass" ? "bg-green-600 hover:bg-green-700" : ""}
-                                onClick={() => setInterviewResult("pass")}
-                              >
-                                通过
-                              </Button>
-                              <Button
-                                variant={interviewResult === "fail" ? "default" : "outline"}
-                                className={interviewResult === "fail" ? "bg-red-600 hover:bg-red-700" : ""}
-                                onClick={() => setInterviewResult("fail")}
-                              >
-                                未通过
-                              </Button>
-                            </div>
-                            <Textarea
-                              value={evaluationText}
-                              onChange={(e) => setEvaluationText(e.target.value)}
-                              placeholder="请输入面评"
-                              rows={3}
-                            />
-                            <Button
-                              onClick={() => handleMarkCompleted(task.id)}
-                              disabled={!interviewResult}
-                            >
-                              提交结果
-                            </Button>
-                          </div>
-                        ) : (
-                          <>
-                            <Button onClick={() => setExpandedTask(task.id)}>标记完成</Button>
-                            <Button variant="outline" onClick={() => handleMarkNoShow(task.id)}>
-                              标记未到场
-                            </Button>
-                          </>
-                        )}
-                      </div>
-                    )}
-
-                  {task.status === "completed" && !task.evaluation && (
-                    <div className="mt-4">
-                      {expandedTask === task.id ? (
-                        <div className="space-y-2">
-                          <Textarea
-                            value={evaluationText}
-                            onChange={(e) => setEvaluationText(e.target.value)}
-                            placeholder="请输入面评"
-                            rows={3}
-                          />
-                          <Button onClick={() => handleMarkCompleted(task.id)}>提交面评</Button>
-                        </div>
-                      ) : (
-                        <Button variant="outline" onClick={() => setExpandedTask(task.id)}>
-                          填写面评
+                );
+              } else if (canMark) {
+                actions =
+                  expandedTask === task.id ? (
+              <div className="space-y-2 w-full">
+                      <div className="flex gap-2">
+                        <Button
+                          variant={interviewResult === "pass" ? "default" : "outline"}
+                          className={interviewResult === "pass" ? "bg-green-600 hover:bg-green-700" : ""}
+                          onClick={() => setInterviewResult("pass")}
+                        >
+                          通过
                         </Button>
-                      )}
+                        <Button
+                          variant={interviewResult=== "fail" ? "default" : "outline"}
+                          className={interviewResult === "fail" ? "bg-red-600 hover:bg-red-700" : ""}
+                          onClick={() => setInterviewResult("fail")}
+                        >
+                      未通过
+                       </Button>
+                      </div>
+                      <Textarea
+                        value={evaluationText}
+                        onChange={(e) => setEvaluationText(e.target.value)}
+                        placeholder="请输入面评"
+                        rows={3}
+                      />
+                      <Button onClick={() => handleMarkCompleted(task.id)} disabled={!interviewResult}>
+                        提交结果
+                      </Button>
                     </div>
-                  )}
-                </CardContent>
-              </Card>
-            ))}
+                  ) : (
+                    <div className="flex gap-2">
+                      <Button onClick={() => setExpandedTask(task.id)}>填写面评</Button>
+                      <Button onClick={() => setExpandedTask(task.id)}>反馈结果</Button>
+                      <Button variant="outline" onClick={() => handleMarkNoShow(task.id)}>
+                        标记未到场
+                    </Button>
+                    </div>
+                  );
+              } else if (canEvaluate) {
+                actions =
+                  expandedTask === task.id ? (
+                    <div className="space-y-2">
+                      <Textarea
+                        value={evaluationText}
+                        onChange={(e) => setEvaluationText(e.target.value)}
+                        placeholder="请输入面评"
+                        rows={3}
+                      />
+                      <Button onClick={() => handleMarkCompleted(task.id)}>提交面评</Button>
+                    </div>
+                  ) : (
+                    <Button variant="outline" onClick={() => setExpandedTask(task.id)}>
+                      填写面评
+                    </Button>
+                  );
+              }
+              return (
+                <InterviewCard
+                  key={task.id}
+                  standalone
+                  showHeader
+                  roundLabel={`第${task.round}轮`}
+                  data={{
+                    id: task.id,
+                    candidate_name: task.candidate_name,
+                    job_title: task.job_title,
+                    scheduled_at: task.scheduled_at,
+                    location: task.location,
+                    contact_person: task.contact_person,
+                    contact_phone: task.contact_phone,
+                    status: task.status,
+                    result: task.result,
+                    evaluation: task.evaluation,
+                    response_status: task.response_status,
+                    response_reason: task.response_reason,
+                    round: task.round,
+                  }}
+                  actions={actions}
+                />
+              );
+            })}
           </div>
         )
       ) : (
@@ -580,20 +539,43 @@ export default function InterviewerTasksPage() {
                     </div>
                   )}
 
-                  {task.status === "completed" && !task.feedback && (
+                  {task.status !== "completed" && (
                     <div className="mt-4">
                       {expandedTask === task.id ? (
                         <div className="space-y-2">
+                          <div className="flex gap-2">
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={trialResult === "pass" ? "default" : "outline"}
+                              onClick={() => setTrialResult("pass")}
+                            >
+                              试岗通过
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant={trialResult === "fail" ? "default" : "outline"}
+                              onClick={() => setTrialResult("fail")}
+                            >
+                              试岗未通过
+                            </Button>
+                          </div>
                           <Textarea
                             value={trialFeedback}
                             onChange={(e) => setTrialFeedback(e.target.value)}
                             placeholder="请输入试岗反馈"
                             rows={3}
                           />
-                          <Button onClick={() => handleSubmitTrialFeedback(task.id)}>提交反馈</Button>
+                          <Button
+                            onClick={() => handleSubmitTrialFeedback(task.id)}
+                            disabled={!trialResult || !trialFeedback.trim()}
+                          >
+                            提交反馈
+                          </Button>
                         </div>
                       ) : (
-                        <Button variant="outline" onClick={() => setExpandedTask(task.id)}>
+                        <Button variant="outline" onClick={() => { setExpandedTask(task.id); setTrialResult(""); setTrialFeedback(""); }}>
                           填写反馈
                         </Button>
                       )}
@@ -604,7 +586,7 @@ export default function InterviewerTasksPage() {
             ))}
           </div>
         )
-      )}
+      ))}
 
       {rejectModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

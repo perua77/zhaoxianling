@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
 import { cn } from "@/lib/utils";
+import { getHomePathByRoles } from "@/lib/auth-redirect";
 
 type Tab = "candidate" | "admin";
 
@@ -52,7 +53,7 @@ export default function LoginPage() {
       if (mode === "login") {
         const result = await login(`${phone}@zhaoxianling.cn`, password);
         if (result.success) {
-          router.push("/home");
+          router.push(getHomePathByRoles(useAuth.getState().user?.roles || []));
         }
       } else {
         const result = await register(phone, password, fullName);
@@ -76,12 +77,8 @@ export default function LoginPage() {
       if (result.success) {
         const state = useAuth.getState();
         const roles = state.user?.roles || [];
-        
-        if (roles.includes("recruiter") || roles.includes("interviewer") || roles.includes("vendor")) {
-          router.push("/recruiter/dashboard");
-        } else {
-          router.push("/home");
-        }
+
+        router.push(getHomePathByRoles(roles));
       }
     }
   };

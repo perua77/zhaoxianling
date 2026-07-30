@@ -1,9 +1,9 @@
-import type { LucideIcon } from "lucide-react";
 import { Inbox } from "lucide-react";
+import type { FC } from "react";
 import { cn } from "@/lib/utils";
 
 interface EmptyStateProps {
-  icon?: LucideIcon;
+  icon?: FC<{ className?: string }>;
   title: string;
   description?: string;
   action?: React.ReactNode;

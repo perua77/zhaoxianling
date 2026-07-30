@@ -22,8 +22,8 @@ export function Navbar() {
         <div className="flex gap-4 items-center">
           {user ? (
             <>
-              <Link href="/my-applications">
-                <Button variant="ghost">我的投递</Button>
+              <Link href="/profile">
+                <Button variant="ghost">个人中心</Button>
               </Link>
               <Button variant="outline" onClick={handleLogout}>
                 退出登录

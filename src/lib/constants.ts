@@ -7,7 +7,9 @@ import type {
   TrialStatus,
   InterviewResult,
   ReferralStatus,
+  OnboardingStatus,
 } from "@/lib/types";
+import type { FC } from "react";
 import {
   Home,
   Briefcase,
@@ -17,7 +19,6 @@ import {
   ClipboardList,
   LayoutDashboard,
   Calendar,
-  type LucideIcon,
 } from "lucide-react";
 
 /* ============================================================
@@ -57,6 +58,7 @@ export const APPLICATION_STATUS_LABELS: Record<ApplicationStatus, string> = {
   hired: "已录用",
   accepted: "已录用",
   rejected: "已拒绝",
+  terminated: "已终止",
 };
 
 export const MESSAGE_TYPE_LABELS: Record<MessageType, string> = {
@@ -69,9 +71,10 @@ export const MESSAGE_TYPE_LABELS: Record<MessageType, string> = {
 };
 
 export const TRIAL_STATUS_LABELS: Record<TrialStatus, string> = {
-  active: "试用中",
+  pending: "待开始",
+  confirmed: "试岗中",
   completed: "已完成",
-  terminated: "已终止",
+  cancelled: "已终止",
 };
 
 export const INTERVIEW_RESULT_LABELS: Record<InterviewResult, string> = {
@@ -90,6 +93,13 @@ export const JOB_STATUS_LABELS: Record<string, string> = {
   active: "招聘中",
   paused: "暂停招聘",
   closed: "已关闭",
+};
+
+export const ONBOARDING_STATUS_LABELS: Record<OnboardingStatus, string> = {
+  pending_confirmation: "待确认",
+  confirmed: "已确认",
+  onboarded: "已入职",
+  cancelled: "已取消",
 };
 
 /* ============================================================
@@ -113,12 +123,14 @@ export const APPLICATION_STATUS_COLORS: Record<ApplicationStatus, string> = {
   hired: "bg-brand-green/10 text-brand-green",
   accepted: "bg-brand-green/10 text-brand-green",
   rejected: "bg-red-100 text-red-700",
+  terminated: "bg-gray-100 text-gray-500",
 };
 
 export const TRIAL_STATUS_COLORS: Record<TrialStatus, string> = {
-  active: "bg-brand-green/10 text-brand-green",
+  pending: "bg-gray-100 text-gray-600",
+  confirmed: "bg-brand-green/10 text-brand-green",
   completed: "bg-blue-100 text-blue-700",
-  terminated: "bg-red-100 text-red-700",
+  cancelled: "bg-red-100 text-red-700",
 };
 
 export const INTERVIEW_RESULT_COLORS: Record<InterviewResult, string> = {
@@ -133,6 +145,13 @@ export const REFERRAL_STATUS_COLORS: Record<ReferralStatus, string> = {
   rejected: "bg-red-100 text-red-700",
 };
 
+export const ONBOARDING_STATUS_COLORS: Record<OnboardingStatus, string> = {
+  pending_confirmation: "bg-yellow-100 text-yellow-700",
+  confirmed: "bg-blue-100 text-blue-700",
+  onboarded: "bg-brand-green/10 text-brand-green",
+  cancelled: "bg-gray-100 text-gray-500",
+};
+
 /* ============================================================
  * 底部导航栏配置（按角色动态显示 Tab）
  * ============================================================ */
@@ -140,14 +159,14 @@ export const REFERRAL_STATUS_COLORS: Record<ReferralStatus, string> = {
 export interface NavTab {
   label: string;
   href: string;
-  icon: LucideIcon;
+  icon: FC<{ className?: string }>;
 }
 
 export const BOTTOM_NAV: Record<UserRole, NavTab[]> = {
   candidate: [
     { label: "首页", href: "/home", icon: Home },
     { label: "岗位", href: "/jobs", icon: Briefcase },
-    { label: "面试", href: "/interviews", icon: Calendar },
+    { label: "面试日历", href: "/calendar", icon: Calendar },
     { label: "消息", href: "/messages", icon: MessageSquare },
     { label: "我的", href: "/profile", icon: User },
   ],

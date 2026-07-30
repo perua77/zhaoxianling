@@ -14,106 +14,10 @@ import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { LoadingSpinner } from "@/components/ui/LoadingSpinner";
-import { ArrowLeft, UserPlus } from "lucide-react";
+import { ArrowLeft, UserPlus, Share2 } from "lucide-react";
 
-const mockJobs: Job[] = [
-  {
-    id: "mock-1",
-    recruiter_id: "recruiter-1",
-    title: "超市收银员",
-    description: "负责超市收银工作，处理顾客结账，维护收银台整洁，提供优质顾客服务。要求有责任心，沟通能力强。",
-    domain: "supermarket",
-    employment_type: "fulltime",
-    salary_min: 4500,
-    salary_max: 6000,
-    salary_unit: "月",
-    location: "北京市朝阳区",
-    requirements: "1. 年龄18-35岁\n2. 有收银经验优先\n3. 能适应轮班工作\n4. 持有健康证",
-    is_active: true,
-    created_at: "2024-01-15T10:00:00Z",
-    updated_at: "2024-01-15T10:00:00Z",
-  },
-  {
-    id: "mock-2",
-    recruiter_id: "recruiter-2",
-    title: "仓库管理员",
-    description: "负责仓库日常管理，包括货物入库、出库、盘点、整理等工作。要求熟悉仓库操作流程，能吃苦耐劳。",
-    domain: "warehouse",
-    employment_type: "hourly",
-    salary_min: 25,
-    salary_max: 32,
-    salary_unit: "时",
-    location: "上海市浦东新区",
-    requirements: "1. 年龄20-45岁\n2. 能熟练操作叉车优先\n3. 有仓库管理经验\n4. 身体健康，能承受体力劳动",
-    is_active: true,
-    created_at: "2024-01-14T09:00:00Z",
-    updated_at: "2024-01-14T09:00:00Z",
-  },
-  {
-    id: "mock-3",
-    recruiter_id: "recruiter-3",
-    title: "销售代表",
-    description: "负责产品销售，开发新客户，维护老客户关系，完成销售目标。要求有良好的沟通能力和销售技巧。",
-    domain: "sales",
-    employment_type: "fulltime",
-    salary_min: 5000,
-    salary_max: 12000,
-    salary_unit: "月",
-    location: "广州市天河区",
-    requirements: "1. 年龄22-40岁\n2. 有销售经验优先\n3. 能适应出差\n4. 有驾照优先",
-    is_active: true,
-    created_at: "2024-01-13T14:00:00Z",
-    updated_at: "2024-01-13T14:00:00Z",
-  },
-  {
-    id: "mock-4",
-    recruiter_id: "recruiter-4",
-    title: "工厂操作工",
-    description: "负责生产线操作，按照工艺流程完成生产任务，保证产品质量。要求能适应流水线工作节奏。",
-    domain: "factory",
-    employment_type: "daily",
-    salary_min: 180,
-    salary_max: 220,
-    salary_unit: "日",
-    location: "深圳市宝安区",
-    requirements: "1. 年龄18-45岁\n2. 能适应站立工作\n3. 服从管理安排\n4. 无不良嗜好",
-    is_active: true,
-    created_at: "2024-01-12T08:00:00Z",
-    updated_at: "2024-01-12T08:00:00Z",
-  },
-  {
-    id: "mock-5",
-    recruiter_id: "recruiter-5",
-    title: "生鲜理货员",
-    description: "负责超市生鲜区商品陈列、补货、整理，保证商品新鲜度和货架整洁。要求有责任心，注重卫生。",
-    domain: "supermarket",
-    employment_type: "fulltime",
-    salary_min: 4000,
-    salary_max: 5500,
-    salary_unit: "月",
-    location: "成都市锦江区",
-    requirements: "1. 年龄18-40岁\n2. 有生鲜工作经验优先\n3. 能适应早晚班\n4. 持有健康证",
-    is_active: true,
-    created_at: "2024-01-11T11:00:00Z",
-    updated_at: "2024-01-11T11:00:00Z",
-  },
-  {
-    id: "mock-6",
-    recruiter_id: "recruiter-6",
-    title: "物流分拣员",
-    description: "负责快递包裹分拣、扫描、打包等工作。要求手脚麻利，能适应高强度工作。",
-    domain: "warehouse",
-    employment_type: "hourly",
-    salary_min: 22,
-    salary_max: 28,
-    salary_unit: "时",
-    location: "杭州市余杭区",
-    requirements: "1. 年龄18-45岁\n2. 能适应夜班\n3. 视力良好\n4. 无犯罪记录",
-    is_active: true,
-    created_at: "2024-01-10T16:00:00Z",
-    updated_at: "2024-01-10T16:00:00Z",
-  },
-];
+// 品牌色
+const BRAND_GREEN = "#185A56";
 
 function getSalaryUnit(employmentType: Job["employment_type"]): string {
   switch (employmentType) {
@@ -133,22 +37,95 @@ export default function JobDetailPage() {
   const { roles } = useAuth();
   const [job, setJob] = useState<Job | null>(null);
   const [loading, setLoading] = useState(true);
+  const [toast, setToast] = useState<{ message: string; type: "success" | "error" } | null>(null);
 
   const isReferrer = roles?.includes("referrer");
 
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      console.warn("[API] Fetch timed out, using mock data");
-      const mockJob = mockJobs.find((j) => j.id === id);
-      if (mockJob) {
-        setJob(mockJob);
-      }
-      setLoading(false);
-    }, 8000);
+  const showToast = (message: string, type: "success" | "error") => {
+    setToast({ message, type });
+    setTimeout(() => setToast(null), 3000);
+  };
 
+  // 生成分享文案：【七鲜招聘】{岗位名称} | {薪资范围} | {工作地点}\n查看详情：{URL}
+  const buildShareText = (currentJob: Job, url: string) => {
+    const title = currentJob.title?.trim() || "优质岗位";
+    const location = currentJob.location?.trim() || "地点面议";
+
+    let salary = "薪资面议";
+    if (currentJob.salary_min != null && currentJob.salary_max != null) {
+      const unit = currentJob.salary_unit || getSalaryUnit(currentJob.employment_type);
+      salary = `¥${currentJob.salary_min}-${currentJob.salary_max}/${unit}`;
+    }
+
+    return `【七鲜招聘】${title} | ${salary} | ${location}\n查看详情：${url}`;
+  };
+
+  const handleShare = async () => {
+    if (!job) return;
+
+    // 使用当前页面 origin + 路径，不硬编码域名
+    const url = `${window.location.origin}/jobs/${job.id}`;
+    const shareText = buildShareText(job, url);
+
+    // 移动端优先系统原生分享面板（需 HTTPS/localhost 环境）
+    if (typeof navigator !== "undefined" && typeof navigator.share === "function") {
+      try {
+        await navigator.share({ title: `七鲜招聘 - ${job.title}`, text: shareText, url });
+        return;
+      } catch (err) {
+        // 用户主动取消（AbortError）不提示错误，直接返回
+        if (err instanceof DOMException && err.name === "AbortError") return;
+        // 其他错误则降级到复制
+      }
+    }
+
+    // 剪贴板复制（需安全上下文 HTTPS/localhost）
+    const isSecure =
+      typeof window !== "undefined" &&
+      (window.isSecureContext || window.location.hostname === "localhost");
+
+    if (
+      isSecure &&
+      typeof navigator !== "undefined" &&
+      navigator.clipboard &&
+      typeof navigator.clipboard.writeText === "function"
+    ) {
+      try {
+        await navigator.clipboard.writeText(shareText);
+        showToast("已复制分享文案，快去发给朋友吧", "success");
+        return;
+      } catch {
+        // 权限被拒或写入失败 → 尝试降级方案
+      }
+    }
+
+    // 降级：非 HTTPS 或剪贴板不可用，使用 execCommand 兜底
+    try {
+      const textarea = document.createElement("textarea");
+      textarea.value = shareText;
+      textarea.style.position = "fixed";
+      textarea.style.opacity = "0";
+      document.body.appendChild(textarea);
+      textarea.focus();
+      textarea.select();
+      const ok = document.execCommand("copy");
+      document.body.removeChild(textarea);
+      if (ok) {
+        showToast("已复制分享文案，快去发给朋友吧", "success");
+        return;
+      }
+      throw new Error("execCommand copy failed");
+    } catch {
+      showToast(
+        isSecure ? "复制失败，请手动长按选择文案复制" : "当前环境不支持自动复制，请手动复制链接分享",
+        "error"
+      );
+    }
+  };
+
+  useEffect(() => {
     async function fetchJob() {
       if (!id) {
-        clearTimeout(timeoutId);
         setLoading(false);
         return;
       }
@@ -159,27 +136,15 @@ export default function JobDetailPage() {
 
         if (result.success && result.data) {
           setJob(result.data as Job);
-        } else {
-          const mockJob = mockJobs.find((j) => j.id === id);
-          if (mockJob) {
-            setJob(mockJob);
-          }
         }
       } catch (err) {
         console.error("[API] Error fetching job:", err);
-        const mockJob = mockJobs.find((j) => j.id === id);
-        if (mockJob) {
-          setJob(mockJob);
-        }
       } finally {
-        clearTimeout(timeoutId);
         setLoading(false);
       }
     }
 
     fetchJob();
-
-    return () => clearTimeout(timeoutId);
   }, [id]);
 
   if (loading) {
@@ -206,6 +171,15 @@ export default function JobDetailPage() {
 
   return (
     <div className="container mx-auto p-6 max-w-2xl">
+      {toast && (
+        <div
+          className={`fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 transition-all ${
+            toast.type === "success" ? "bg-brand-green text-white" : "bg-red-500 text-white"
+          }`}
+        >
+          {toast.message}
+        </div>
+      )}
       <Link href="/" className="mb-4 inline-flex items-center text-muted-foreground hover:text-brand-green transition-colors">
         <ArrowLeft className="mr-1 h-4 w-4" />
         返回岗位列表
@@ -283,6 +257,16 @@ export default function JobDetailPage() {
                   </Button>
                 </Link>
               )}
+              <Button
+                size="lg"
+                variant="outline"
+                className="w-full"
+                style={{ borderColor: BRAND_GREEN, color: BRAND_GREEN }}
+                onClick={handleShare}
+              >
+                <Share2 className="mr-2" size={18} />
+                分享岗位
+              </Button>
             </div>
           </div>
         </CardContent>

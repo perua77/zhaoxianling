@@ -22,8 +22,9 @@ export async function GET(request: Request) {
     if (type === "interview") {
       const { data: interviews } = await supabase
         .from("interviews")
-        .select("*, applications(id, candidate_id), jobs(id, title)")
-        .eq("interviewer_id", userId);
+        .select("*, applications(id, candidate_id, full_name), jobs(id, title)")
+        .eq("interviewer_id", userId)
+        .order("scheduled_at", { ascending: true });
 
       const candidateIds = new Set(
         (interviews || []).map((int: { applications: { candidate_id: string } }) =>
@@ -40,19 +41,37 @@ export async function GET(request: Request) {
         (profiles as { id: string; full_name: string }[] || []).map((p) => [p.id, p.full_name])
       );
 
-      const appIdToRound = new Map<string, number>();
-      (interviews || []).forEach((int: { applications: { id: string } }) => {
-        const appId = int.applications?.id;
-        if (appId) {
-          appIdToRound.set(appId, (appIdToRound.get(appId) || 0) + 1);
-        }
+      // 计算每条面试的真实轮次：需查询这些 application 的全部面试（不限当前面试官）
+      const appIds = Array.from(
+        new Set(
+          (interviews || [])
+            .map((int: { applications: { id: string } }) => int.applications?.id)
+            .filter(Boolean)
+        )
+      );
+
+      const { data: allInterviews } = await supabase
+        .from("interviews")
+        .select("id, application_id, scheduled_at, status")
+        .in("application_id", appIds)
+        .order("scheduled_at", { ascending: true });
+
+      // 为每个 application 内的非取消面试按时间顺序编号，得到 interviewId -> round
+      const interviewIdToRound = new Map<string, number>();
+      const appRunningCount = new Map<string, number>();
+      (allInterviews || []).forEach((int: { id: string; application_id: string; status: string }) => {
+        if (int.status === "cancelled") return;
+        const appId = int.application_id;
+        const next = (appRunningCount.get(appId) || 0) + 1;
+        appRunningCount.set(appId, next);
+        interviewIdToRound.set(int.id, next);
       });
 
       const result = (interviews || []).map((int: any) => ({
         id: int.id,
         application_id: int.applications?.id,
         job_id: int.jobs?.id,
-        candidate_name: profileMap.get(int.applications?.candidate_id) || "未知",
+        candidate_name: int.applications?.full_name || profileMap.get(int.applications?.candidate_id) || "未知",
         job_title: int.jobs?.title || "未知",
         scheduled_at: int.scheduled_at,
         location: int.location,
@@ -63,14 +82,14 @@ export async function GET(request: Request) {
         evaluation: int.evaluation,
         response_status: int.response_status,
         response_reason: int.response_reason,
-        round: appIdToRound.get(int.applications?.id) || 1,
+        round: interviewIdToRound.get(int.id) || 1,
       }));
 
       return NextResponse.json({ success: true, data: result });
     } else if (type === "trial") {
       const { data: trials } = await supabase
         .from("trials")
-        .select("*, applications(id, candidate_id), jobs(id, title)")
+        .select("*, applications(id, candidate_id, full_name), jobs(id, title)")
         .eq("interviewer_id", userId);
 
       const candidateIds = new Set(
@@ -92,7 +111,7 @@ export async function GET(request: Request) {
         id: trial.id,
         application_id: trial.applications?.id,
         job_id: trial.jobs?.id,
-        candidate_name: profileMap.get(trial.applications?.candidate_id) || "未知",
+        candidate_name: trial.applications?.full_name || profileMap.get(trial.applications?.candidate_id) || "未知",
         job_title: trial.jobs?.title || "未知",
         start_date: trial.start_date,
         end_date: trial.end_date,
@@ -253,10 +272,25 @@ export async function POST(request: Request) {
 
         const { error } = await supabase
           .from("interviews")
-          .update({ response_status: "rejected", response_reason: reason })
+          .update({
+            response_status: "rejected",
+            response_reason: reason,
+            // 修复1&2：同步取消面试，使招聘者可重新安排
+            status: "cancelled",
+          })
           .eq("id", interviewId);
 
         if (error) throw error;
+
+        // 修复B：本轮面试已置为 cancelled，将 application 显式置为 interview-scheduled
+        // （面试流程中、待重新安排），保证招聘者标签"待面试"、候选人进度条停留"面试"节点。
+        if (interview.application_id) {
+          await supabase
+            .from("applications")
+            .update({ status: "interview-scheduled" })
+            .eq("id", interview.application_id)
+            .in("status", ["interview-scheduled", "interviewing", "reviewing"]);
+        }
 
         if (job && interviewer && candidate) {
           await sendMessage(
@@ -264,6 +298,15 @@ export async function POST(request: Request) {
             "interview",
             "面试官拒绝了面试安排",
             `面试官 ${interviewer.full_name} 拒绝了 ${candidate.full_name} 的面试安排。理由：${reason}。请重新安排面试时间。`
+          );
+        }
+        // 修复1：通知候选人本轮面试已取消
+        if (job && app?.candidate_id) {
+          await sendMessage(
+            app.candidate_id,
+            "interview",
+            "面试安排已取消",
+            `你投递的「${job.title}」岗位本轮面试已取消，招聘方将重新安排面试时间，请留意通知。`
           );
         }
 
@@ -275,11 +318,18 @@ export async function POST(request: Request) {
 
         const { data: interview, error: getError } = await supabase
           .from("interviews")
-          .select("application_id, job_id")
+          .select("application_id, job_id, interviewer_id")
           .eq("id", interviewId)
           .single();
 
         if (getError) throw getError;
+
+        if (interview.interviewer_id !== userId) {
+          return NextResponse.json(
+            { success: false, error: "只有该轮面试官可提交面评" },
+            { status: 403 }
+          );
+        }
 
         const { data: app, error: appError } = await supabase
           .from("applications")
@@ -318,9 +368,7 @@ export async function POST(request: Request) {
             const content =
               interviewResult === "pass"
                 ? `恭喜！你在「${job.title}」岗位的面试中表现优秀，已通过面试。我们将尽快与你联系安排下一步流程。`
-                : `很遗憾，你在「${job.title}」岗位的面试中未通过。感谢你的投递，祝你早日找到合适的工作！${
-                    evaluation ? "\n\n面试官评价：" + evaluation : ""
-                  }`;
+                : `很遗憾，你在「${job.title}」岗位的面试中未通过。感谢你的投递，祝你早日找到合适的工作！`;
 
             await sendMessage(app.candidate_id, "result", title, content);
           }
@@ -334,11 +382,18 @@ export async function POST(request: Request) {
 
         const { data: interview, error: getError } = await supabase
           .from("interviews")
-          .select("application_id, job_id")
+          .select("application_id, job_id, interviewer_id")
           .eq("id", interviewId)
           .single();
 
         if (getError) throw getError;
+
+        if (interview.interviewer_id !== userId) {
+          return NextResponse.json(
+            { success: false, error: "只有该轮面试官可提交面评" },
+            { status: 403 }
+          );
+        }
 
         const { data: app, error: appError } = await supabase
           .from("applications")
@@ -377,7 +432,7 @@ export async function POST(request: Request) {
       }
 
       case "submit-trial-feedback": {
-        const { trialId, feedback } = body;
+        const { trialId, feedback, result } = body;
 
         const { data: trial, error: getError } = await supabase
           .from("trials")
@@ -399,19 +454,26 @@ export async function POST(request: Request) {
           .eq("id", trial.job_id)
           .single();
 
+        // 试岗结果标签（Trial 表无 result 字段，融入 feedback 存储）
+        const resultLabel =
+          result === "pass" ? "[试岗通过]" : result === "fail" ? "[试岗未通过]" : "";
+        const storedFeedback = resultLabel ? `${resultLabel} ${feedback}` : feedback;
+
         const { error } = await supabase
           .from("trials")
-          .update({ feedback, status: "completed" })
+          .update({ feedback: storedFeedback, status: "completed" })
           .eq("id", trialId);
 
         if (error) throw error;
 
         if (app && job) {
+          const resultText =
+            result === "pass" ? "（试岗通过）" : result === "fail" ? "（试岗未通过）" : "";
           await sendMessage(
             app.candidate_id,
             "trial",
             "试岗反馈",
-            `你在「${job.title}」岗位的试岗已完成。反馈内容：${feedback}`
+            `你在「${job.title}」岗位的试岗已完成${resultText}，请留意后续通知。`
           );
         }
 
